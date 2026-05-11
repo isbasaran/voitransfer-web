@@ -17,7 +17,7 @@
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             padding: 20px;
         }
         
@@ -28,13 +28,55 @@
             padding: 40px;
             max-width: 600px;
             width: 100%;
+            margin: 20px auto;
         }
         
         h1 {
             text-align: center;
             color: #333;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             font-size: 28px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: #f0f0f0;
+            color: #555;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 0;
+            width: auto;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-btn:hover {
+            transform: none;
+            box-shadow: none;
+            opacity: 0.9;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
         }
         
         .form-group {
@@ -63,7 +105,7 @@
             box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
         }
         
-        button {
+        button[type="submit"] {
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -76,7 +118,7 @@
             margin-top: 10px;
         }
         
-        button:hover {
+        button[type="submit"]:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
         }
@@ -100,142 +142,333 @@
             color: #721c24;
             display: block;
         }
+
+        #checkResult {
+            display: none;
+            margin-top: 20px;
+            background: #f8f9ff;
+            border: 1px solid #667eea;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        #checkResult h3 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+
+        #checkResult p {
+            margin-bottom: 8px;
+            color: #444;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            padding: 20px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎫 VoiTransfer Rezervasyon</h1>
-        
-        <form id="reservationForm">
-            <div class="form-group">
-                <label>Voucher (Boş bırakırsa otomatik oluşur)</label>
-                <input type="text" name="voucher" placeholder="BRX200526001">
-            </div>
-            
-            <div class="form-group">
-                <label>Tarih *</label>
-                <input type="text" name="tarih" placeholder="25.05.2026" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Operator *</label>
-                <input type="text" name="operator" placeholder="BRIX TRAVEL" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Job *</label>
-                <select name="job" required>
-                    <option value="">Seç</option>
-                    <option value="ARRIVAL">ARRIVAL</option>
-                    <option value="DEPARTURE">DEPARTURE</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label>From *</label>
-                <input type="text" name="from" placeholder="AYT" required>
-            </div>
-            
-            <div class="form-group">
-                <label>To *</label>
-                <input type="text" name="to" placeholder="BELEK" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Hotel *</label>
-                <input type="text" name="hotel" placeholder="SUENO DELUXE" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Uçuş *</label>
-                <input type="text" name="ucus" placeholder="PC1801" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Saat *</label>
-                <input type="text" name="saat" placeholder="14:30" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Pickup Time</label>
-                <input type="text" name="pickup" placeholder="14:30">
-            </div>
-            
-            <div class="form-group">
-                <label>Yolcu *</label>
-                <input type="text" name="yolcu" placeholder="Mohammed Ali" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Telefon *</label>
-                <input type="text" name="telefon" placeholder="+962771234567" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Yetişkin *</label>
-                <input type="number" name="yetiskin" placeholder="2" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Çocuk *</label>
-                <input type="number" name="cocuk" placeholder="0" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Bebek *</label>
-                <input type="number" name="bebek" placeholder="0" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Fiyat *</label>
-                <input type="text" name="fiyat" placeholder="35" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Döviz *</label>
-                <select name="döviz" required>
-                    <option value="">Seç</option>
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                    <option value="TL">TL</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label>Not</label>
-                <textarea name="not" rows="3" placeholder="VIP transfer"></textarea>
-            </div>
-            
-            <button type="submit">📝 Rezervasyon Gönder</button>
-        </form>
-        
+        <h1>🎫 VoiTransfer</h1>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('rezervasyon')">📝 Rezervasyon</button>
+            <button class="tab-btn" onclick="switchTab('sorgula')">🔍 Sorgula</button>
+            <button class="tab-btn" onclick="switchTab('duzenle')">✏️ Düzenle</button>
+            <button class="tab-btn" onclick="switchTab('iptal')">❌ İptal</button>
+        </div>
+
+        <!-- REZERVASYON PANEL -->
+        <div id="tab-rezervasyon" class="tab-panel active">
+            <form id="reservationForm">
+                <div class="form-group">
+                    <label>Voucher (Boş bırakırsa otomatik oluşur)</label>
+                    <input type="text" name="voucher" placeholder="BRX200526001">
+                </div>
+                <div class="form-group">
+                    <label>Tarih *</label>
+                    <input type="text" name="tarih" placeholder="25.05.2026" required>
+                </div>
+                <div class="form-group">
+                    <label>Operator *</label>
+                    <input type="text" name="operator" placeholder="BRIX TRAVEL" required>
+                </div>
+                <div class="form-group">
+                    <label>Job *</label>
+                    <select name="job" required>
+                        <option value="">Seç</option>
+                        <option value="ARRIVAL">ARRIVAL</option>
+                        <option value="DEPARTURE">DEPARTURE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>From *</label>
+                    <input type="text" name="from" placeholder="AYT" required>
+                </div>
+                <div class="form-group">
+                    <label>To *</label>
+                    <input type="text" name="to" placeholder="BELEK" required>
+                </div>
+                <div class="form-group">
+                    <label>Hotel *</label>
+                    <input type="text" name="hotel" placeholder="SUENO DELUXE" required>
+                </div>
+                <div class="form-group">
+                    <label>Uçuş *</label>
+                    <input type="text" name="ucus" placeholder="PC1801" required>
+                </div>
+                <div class="form-group">
+                    <label>Saat *</label>
+                    <input type="text" name="saat" placeholder="14:30" required>
+                </div>
+                <div class="form-group">
+                    <label>Pickup Time</label>
+                    <input type="text" name="pickup" placeholder="14:30">
+                </div>
+                <div class="form-group">
+                    <label>Yolcu *</label>
+                    <input type="text" name="yolcu" placeholder="Mohammed Ali" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefon *</label>
+                    <input type="text" name="telefon" placeholder="+962771234567" required>
+                </div>
+                <div class="form-group">
+                    <label>Yetişkin *</label>
+                    <input type="number" name="yetiskin" placeholder="2" required>
+                </div>
+                <div class="form-group">
+                    <label>Çocuk *</label>
+                    <input type="number" name="cocuk" placeholder="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Bebek *</label>
+                    <input type="number" name="bebek" placeholder="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Fiyat *</label>
+                    <input type="text" name="fiyat" placeholder="35" required>
+                </div>
+                <div class="form-group">
+                    <label>Döviz *</label>
+                    <select name="döviz" required>
+                        <option value="">Seç</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                        <option value="TL">TL</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Not</label>
+                    <textarea name="not" rows="3" placeholder="VIP transfer"></textarea>
+                </div>
+                <button type="submit">📝 Rezervasyon Gönder</button>
+            </form>
+        </div>
+
+        <!-- SORGULA PANEL -->
+        <div id="tab-sorgula" class="tab-panel">
+            <form id="checkForm">
+                <div class="form-group">
+                    <label>Voucher No *</label>
+                    <input type="text" id="checkVoucher" placeholder="BRX200526001" required>
+                </div>
+                <button type="submit">🔍 Sorgula</button>
+            </form>
+            <div id="checkResult"></div>
+        </div>
+
+        <!-- DÜZENLE PANEL -->
+        <div id="tab-duzenle" class="tab-panel">
+            <form id="editForm">
+                <div class="form-group">
+                    <label>Voucher No *</label>
+                    <input type="text" id="editVoucher" placeholder="BRX200526001" required>
+                </div>
+                <div class="form-group">
+                    <label>Alan 1</label>
+                    <input type="text" name="field_1" placeholder="Değer 1">
+                </div>
+                <div class="form-group">
+                    <label>Alan 2</label>
+                    <input type="text" name="field_2" placeholder="Değer 2">
+                </div>
+                <div class="form-group">
+                    <label>Alan 3</label>
+                    <input type="text" name="field_3" placeholder="Değer 3">
+                </div>
+                <div class="form-group">
+                    <label>Alan 4</label>
+                    <input type="text" name="field_4" placeholder="Değer 4">
+                </div>
+                <div class="form-group">
+                    <label>Alan 5</label>
+                    <input type="text" name="field_5" placeholder="Değer 5">
+                </div>
+                <div class="form-group">
+                    <label>Alan 6</label>
+                    <input type="text" name="field_6" placeholder="Değer 6">
+                </div>
+                <div class="form-group">
+                    <label>Alan 7</label>
+                    <input type="text" name="field_7" placeholder="Değer 7">
+                </div>
+                <div class="form-group">
+                    <label>Alan 8</label>
+                    <input type="text" name="field_8" placeholder="Değer 8">
+                </div>
+                <div class="form-group">
+                    <label>Alan 9</label>
+                    <input type="text" name="field_9" placeholder="Değer 9">
+                </div>
+                <div class="form-group">
+                    <label>Alan 10</label>
+                    <input type="text" name="field_10" placeholder="Değer 10">
+                </div>
+                <div class="form-group">
+                    <label>Alan 11</label>
+                    <input type="text" name="field_11" placeholder="Değer 11">
+                </div>
+                <button type="submit">✏️ Düzenlemeyi Gönder</button>
+            </form>
+        </div>
+
+        <!-- İPTAL PANEL -->
+        <div id="tab-iptal" class="tab-panel">
+            <form id="cancelForm">
+                <div class="form-group">
+                    <label>Voucher No *</label>
+                    <input type="text" id="cancelVoucher" placeholder="BRX200526001" required>
+                </div>
+                <button type="submit">❌ İptal Talebini Gönder</button>
+            </form>
+        </div>
+
         <div id="message" class="message"></div>
     </div>
     
     <script>
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec';
-        const FLASK_URL = SCRIPT_URL.replace('/webhook', '/webhook/edit');
+        const FLASK_BASE = window.location.origin;
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            event.target.classList.add('active');
+        }
 
         document.getElementById('reservationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const form = e.target;
             const formData = new FormData(form);
             const data = Object.fromEntries(formData);
-            
             if (data.job === 'ARRIVAL' && !data.pickup) {
                 data.pickup = data.saat;
             }
-            
             try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
-                
                 if (response.ok) {
                     showMessage('✅ Rezervasyon başarıyla eklendi!', 'success');
                     form.reset();
+                } else {
+                    showMessage('❌ Hata: ' + response.statusText, 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
+            }
+        });
+
+        document.getElementById('checkForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const voucher = document.getElementById('checkVoucher').value.toUpperCase();
+            const resultDiv = document.getElementById('checkResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading">⏳ Yükleniyor...</div>';
+            try {
+                const response = await fetch(SCRIPT_URL + '?voucher=' + encodeURIComponent(voucher));
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.voucher) {
+                        resultDiv.innerHTML = `
+                            <h3>📋 Rezervasyon Detayı</h3>
+                            <p>🎫 Voucher: <strong>${data.voucher || '-'}</strong></p>
+                            <p>📅 Tarih: <strong>${data.tarih || '-'}</strong></p>
+                            <p>🏢 Operator: <strong>${data.operator || '-'}</strong></p>
+                            <p>✈️ Job: <strong>${data.job || '-'}</strong></p>
+                            <p>🛫 From: <strong>${data.from || '-'}</strong></p>
+                            <p>🛬 To: <strong>${data.to || '-'}</strong></p>
+                            <p>🏨 Hotel: <strong>${data.hotel || '-'}</strong></p>
+                            <p>✈️ Uçuş: <strong>${data.ucus || '-'}</strong></p>
+                            <p>🕐 Saat: <strong>${data.saat || '-'}</strong></p>
+                            <p>🚌 Pickup: <strong>${data.pickup || '-'}</strong></p>
+                            <p>👤 Yolcu: <strong>${data.yolcu || '-'}</strong></p>
+                            <p>📞 Telefon: <strong>${data.telefon || '-'}</strong></p>
+                            <p>👨 Yetişkin: <strong>${data.yetiskin || '-'}</strong></p>
+                            <p>👦 Çocuk: <strong>${data.cocuk || '-'}</strong></p>
+                            <p>👶 Bebek: <strong>${data.bebek || '-'}</strong></p>
+                            <p>💰 Fiyat: <strong>${data.fiyat || '-'} ${data.döviz || ''}</strong></p>
+                            <p>📝 Not: <strong>${data.not || '-'}</strong></p>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = '<p style="color:#721c24">❌ Voucher bulunamadı.</p>';
+                    }
+                } else {
+                    resultDiv.innerHTML = '<p style="color:#721c24">❌ Hata: ' + response.statusText + '</p>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<p style="color:#721c24">❌ Bağlantı hatası: ' + error.message + '</p>';
+            }
+        });
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const voucher = document.getElementById('editVoucher').value.toUpperCase();
+            const form = e.target;
+            const fields = {};
+            for (let i = 1; i <= 11; i++) {
+                const el = form.querySelector(`[name="field_${i}"]`);
+                if (el) fields[`field_${i}`] = el.value;
+            }
+            const payload = { voucher, ...fields };
+            try {
+                const response = await fetch(FLASK_BASE + '/webhook/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    showMessage('✅ Düzenleme admin\'e gönderildi!', 'success');
+                    form.reset();
+                } else {
+                    showMessage('❌ Hata: ' + response.statusText, 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
+            }
+        });
+
+        document.getElementById('cancelForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const voucher = document.getElementById('cancelVoucher').value.toUpperCase();
+            try {
+                const response = await fetch(FLASK_BASE + '/webhook/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voucher })
+                });
+                if (response.ok) {
+                    showMessage('✅ İptal talebi admin\'e gönderildi!', 'success');
+                    document.getElementById('cancelVoucher').value = '';
                 } else {
                     showMessage('❌ Hata: ' + response.statusText, 'error');
                 }
@@ -250,17 +483,13 @@
                 const el = document.querySelector(`[name="field_${i}"][data-voucher="${voucher}"]`);
                 if (el) fields[`field_${i}`] = el.value;
             }
-
             const payload = { voucher, ...fields };
-            const editUrl = FLASK_URL.replace('/webhook', '/webhook/edit');
-
             try {
-                const response = await fetch(editUrl, {
+                const response = await fetch(FLASK_BASE + '/webhook/edit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
                 if (response.ok) {
                     showMessage('✅ Düzenleme admin\'e gönderildi!', 'success');
                 } else {
@@ -272,15 +501,12 @@
         }
 
         async function cancelEdit(voucher) {
-            const cancelUrl = FLASK_URL.replace('/webhook/edit', '/webhook/cancel');
-
             try {
-                const response = await fetch(cancelUrl, {
+                const response = await fetch(FLASK_BASE + '/webhook/cancel', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voucher })
                 });
-
                 if (response.ok) {
                     showMessage('✅ İptal talebi admin\'e gönderildi!', 'success');
                 } else {
