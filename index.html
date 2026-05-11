@@ -433,6 +433,43 @@
             }
         });
 
+        document.getElementById('editVoucher').addEventListener('blur', async function() {
+            const voucher = this.value.toUpperCase().trim();
+            this.value = voucher;
+            if (!voucher) return;
+            const form = document.getElementById('editForm');
+            form.querySelector('[data-prefill-status]') && form.querySelector('[data-prefill-status]').remove();
+            const statusEl = document.createElement('p');
+            statusEl.setAttribute('data-prefill-status', '1');
+            statusEl.style.cssText = 'color:#667eea;font-size:13px;margin-bottom:10px';
+            statusEl.textContent = '⏳ Rezervasyon bilgileri yükleniyor...';
+            form.insertBefore(statusEl, form.querySelector('.form-group:nth-child(2)'));
+            try {
+                const resp = await fetch(FLASK_BASE + '/webhook/check?voucher=' + encodeURIComponent(voucher));
+                if (resp.ok) {
+                    const d = await resp.json();
+                    if (d && d.voucher) {
+                        const fieldMap = [d.tarih, d.operator, d.job, d.from, d.to, d.hotel, d.ucus, d.saat, d.yolcu, d.telefon, d.fiyat];
+                        fieldMap.forEach((val, i) => {
+                            const el = form.querySelector(`[name="field_${i+1}"]`);
+                            if (el && val !== undefined) el.value = val;
+                        });
+                        statusEl.style.color = '#155724';
+                        statusEl.textContent = '✅ Alanlar dolduruldu. Düzenleyip gönderin.';
+                    } else {
+                        statusEl.style.color = '#721c24';
+                        statusEl.textContent = '❌ Voucher bulunamadı.';
+                    }
+                } else {
+                    statusEl.style.color = '#721c24';
+                    statusEl.textContent = '❌ Veri alınamadı: ' + resp.statusText;
+                }
+            } catch (err) {
+                statusEl.style.color = '#721c24';
+                statusEl.textContent = '❌ Bağlantı hatası: ' + err.message;
+            }
+        });
+
         document.getElementById('editForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const voucher = document.getElementById('editVoucher').value.toUpperCase();
