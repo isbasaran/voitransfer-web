@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiTransfer - Rezervasyon Sistemi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .message {
+            text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎫 VoiTransfer Rezervasyon</h1>
+        
+        <form id="reservationForm">
+            <div class="form-group">
+                <label>Voucher (Boş bırakırsa otomatik oluşur)</label>
+                <input type="text" name="voucher" placeholder="BRX200526001">
+            </div>
+            
+            <div class="form-group">
+                <label>Tarih *</label>
+                <input type="text" name="tarih" placeholder="25.05.2026" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Operator *</label>
+                <input type="text" name="operator" placeholder="BRIX TRAVEL" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Job *</label>
+                <select name="job" required>
+                    <option value="">Seç</option>
+                    <option value="ARRIVAL">ARRIVAL</option>
+                    <option value="DEPARTURE">DEPARTURE</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>From *</label>
+                <input type="text" name="from" placeholder="AYT" required>
+            </div>
+            
+            <div class="form-group">
+                <label>To *</label>
+                <input type="text" name="to" placeholder="BELEK" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Hotel *</label>
+                <input type="text" name="hotel" placeholder="SUENO DELUXE" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Uçuş *</label>
+                <input type="text" name="ucus" placeholder="PC1801" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Saat *</label>
+                <input type="text" name="saat" placeholder="14:30" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Pickup Time</label>
+                <input type="text" name="pickup" placeholder="14:30">
+            </div>
+            
+            <div class="form-group">
+                <label>Yolcu *</label>
+                <input type="text" name="yolcu" placeholder="Mohammed Ali" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Telefon *</label>
+                <input type="text" name="telefon" placeholder="+962771234567" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Yetişkin *</label>
+                <input type="number" name="yetiskin" placeholder="2" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Çocuk *</label>
+                <input type="number" name="cocuk" placeholder="0" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Bebek *</label>
+                <input type="number" name="bebek" placeholder="0" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Fiyat *</label>
+                <input type="text" name="fiyat" placeholder="35" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Döviz *</label>
+                <select name="döviz" required>
+                    <option value="">Seç</option>
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                    <option value="TL">TL</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Not</label>
+                <textarea name="not" rows="3" placeholder="VIP transfer"></textarea>
+            </div>
+            
+            <button type="submit">📝 Rezervasyon Gönder</button>
+        </form>
+        
+        <div id="message" class="message"></div>
+    </div>
+    
+    <script>
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec';
+        
+        document.getElementById('reservationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
+            
+            if (data.job === 'ARRIVAL' && !data.pickup) {
+                data.pickup = data.saat;
+            }
+            
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showMessage('✅ Rezervasyon başarıyla eklendi!', 'success');
+                    form.reset();
+                } else {
+                    showMessage('❌ Hata: ' + response.statusText, 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
+            }
+        });
+        
+        function showMessage(text, type) {
+            const msgEl = document.getElementById('message');
+            msgEl.textContent = text;
+            msgEl.className = 'message ' + type;
+            setTimeout(() => {
+                msgEl.className = 'message';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
