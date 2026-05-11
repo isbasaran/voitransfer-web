@@ -395,29 +395,32 @@
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = '<div class="loading">⏳ Yükleniyor...</div>';
             try {
-                const response = await fetch(SCRIPT_URL + '?voucher=' + encodeURIComponent(voucher));
+                const response = await fetch(FLASK_BASE + '/webhook/check?voucher=' + encodeURIComponent(voucher));
                 if (response.ok) {
                     const data = await response.json();
                     if (data && data.voucher) {
                         resultDiv.innerHTML = `
-                            <h3>📋 Rezervasyon Detayı</h3>
-                            <p>🎫 Voucher: <strong>${data.voucher || '-'}</strong></p>
-                            <p>📅 Tarih: <strong>${data.tarih || '-'}</strong></p>
-                            <p>🏢 Operator: <strong>${data.operator || '-'}</strong></p>
-                            <p>✈️ Job: <strong>${data.job || '-'}</strong></p>
-                            <p>🛫 From: <strong>${data.from || '-'}</strong></p>
-                            <p>🛬 To: <strong>${data.to || '-'}</strong></p>
-                            <p>🏨 Hotel: <strong>${data.hotel || '-'}</strong></p>
-                            <p>✈️ Uçuş: <strong>${data.ucus || '-'}</strong></p>
-                            <p>🕐 Saat: <strong>${data.saat || '-'}</strong></p>
-                            <p>🚌 Pickup: <strong>${data.pickup || '-'}</strong></p>
-                            <p>👤 Yolcu: <strong>${data.yolcu || '-'}</strong></p>
-                            <p>📞 Telefon: <strong>${data.telefon || '-'}</strong></p>
-                            <p>👨 Yetişkin: <strong>${data.yetiskin || '-'}</strong></p>
-                            <p>👦 Çocuk: <strong>${data.cocuk || '-'}</strong></p>
-                            <p>👶 Bebek: <strong>${data.bebek || '-'}</strong></p>
-                            <p>💰 Fiyat: <strong>${data.fiyat || '-'} ${data.döviz || ''}</strong></p>
-                            <p>📝 Not: <strong>${data.not || '-'}</strong></p>
+                          <div class="status-card">
+                            <h3>🎫 VOUCHER: ${data.voucher}</h3>
+                            <p><strong>📋 RESERVASİYON BİLGİSİ:</strong></p>
+                            <p>👤 Yolcu: ${data.yolcu}</p>
+                            <p>📱 Telefon: ${data.telefon}</p>
+                            <p>📅 Tarih: ${data.tarih}</p>
+                            <p>🛫 Job: ${data.job}</p>
+                            <p>🚗 Rotası: ${data.from} → ${data.to}</p>
+                            <p>🏨 Hotel: ${data.hotel}</p>
+                            <p>✈️ Uçuş: ${data.ucus}</p>
+                            <p>🕐 Saat: ${data.saat}</p>
+                            <p>👥 Yetişkin: ${data.yetiskin} | Çocuk: ${data.cocuk} | Bebek: ${data.bebek}</p>
+                            <p>💰 Fiyat: ${data.fiyat} ${data.döviz}</p>
+                            <p style="margin-top: 15px;"><strong>🚗 ŞOFÖR BİLGİSİ:</strong></p>
+                            <p>🏢 Firma: ${data.supplier_name || 'Atanmadı'}</p>
+                            <p>👤 Şoför: ${data.driver_name || 'Atanmadı'}</p>
+                            <p>📱 Şoför Telefon: ${data.driver_phone || 'Atanmadı'}</p>
+                            <p>💰 Şoför Fiyatı: ${data.supplier_price || 'Atanmadı'} ${data.supplier_currency || ''}</p>
+                            <p style="margin-top: 15px;"><strong>📊 TRANSFER DURUMU:</strong></p>
+                            <p>🟢 Status: ${data.status}</p>
+                          </div>
                         `;
                     } else {
                         resultDiv.innerHTML = '<p style="color:#721c24">❌ Voucher bulunamadı.</p>';
