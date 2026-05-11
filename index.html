@@ -214,7 +214,8 @@
     
     <script>
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec';
-        
+        const FLASK_URL = SCRIPT_URL.replace('/webhook', '/webhook/edit');
+
         document.getElementById('reservationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -242,6 +243,53 @@
                 showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
             }
         });
+
+        async function saveEdit(voucher) {
+            const fields = {};
+            for (let i = 1; i <= 11; i++) {
+                const el = document.querySelector(`[name="field_${i}"][data-voucher="${voucher}"]`);
+                if (el) fields[`field_${i}`] = el.value;
+            }
+
+            const payload = { voucher, ...fields };
+            const editUrl = FLASK_URL.replace('/webhook', '/webhook/edit');
+
+            try {
+                const response = await fetch(editUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    showMessage('✅ Düzenleme admin\'e gönderildi!', 'success');
+                } else {
+                    showMessage('❌ Hata: ' + response.statusText, 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
+            }
+        }
+
+        async function cancelEdit(voucher) {
+            const cancelUrl = FLASK_URL.replace('/webhook/edit', '/webhook/cancel');
+
+            try {
+                const response = await fetch(cancelUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voucher })
+                });
+
+                if (response.ok) {
+                    showMessage('✅ İptal talebi admin\'e gönderildi!', 'success');
+                } else {
+                    showMessage('❌ Hata: ' + response.statusText, 'error');
+                }
+            } catch (error) {
+                showMessage('❌ Bağlantı hatası: ' + error.message, 'error');
+            }
+        }
         
         function showMessage(text, type) {
             const msgEl = document.getElementById('message');
