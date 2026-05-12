@@ -111,7 +111,7 @@ export function GlassAI() {
       <header className="w-full max-w-5xl z-10 mb-8 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <img
-            src="/__mockup/images/voitrip-logo.png"
+            src="/__mockup/images/voitrip-logo-nobg.png"
             alt="Voitrip Logo"
             className="h-12 w-auto drop-shadow-lg"
             style={{ filter: 'drop-shadow(0 0 8px rgba(139,92,246,0.4))' }}
