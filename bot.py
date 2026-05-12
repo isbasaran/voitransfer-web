@@ -108,6 +108,19 @@ def tg_edit(chat_id, message_id, text):
     except Exception:
         pass
 
+def get_drivers():
+    """DRIVERS sheet'ten aktif şoför listesini çek."""
+    try:
+        resp = requests.get(SCRIPT_URL,
+                            params={'action': 'get_drivers'},
+                            timeout=15)
+        result = resp.json()
+        if isinstance(result, list):
+            return result
+        return result.get('drivers', [])
+    except Exception:
+        return []
+
 def notify_admin(data, voucher):
     job_emoji = '🛬' if data.get('job','').upper() == 'ARRIVAL' else '🛫'
     msg = (
@@ -350,8 +363,8 @@ def telegram_webhook():
         tg_answer(cq_id)  # remove loading spinner
 
         if cbd.startswith('approve_'):
+            # ── Rezervasyonu onayla → DRIVERS listesini getir ──────────
             voucher = cbd[len('approve_'):]
-            # Update status in Google Sheets
             try:
                 requests.post(SCRIPT_URL, json={
                     'action': 'update_status',
@@ -361,10 +374,82 @@ def telegram_webhook():
                 }, timeout=15)
             except Exception:
                 pass
-            tg_edit(chat_id, msg_id,
-                    f"✅ <b>ONAYLANDI</b>\n🎫 Voucher: <code>{voucher}</code>\n\nRezervasyon onaylandı. Taşımacı atamak için Google Sheets'i güncelleyin.")
-            tg_send(ADMIN_CHAT_ID,
-                    f"✅ <b>{voucher}</b> rezervasyonu onaylandı.\n\nTaşımacı firmayı atamak için Sheets'te SUPPLIER_NAME sütununu doldurun.")
+
+            drivers = get_drivers()
+            if not drivers:
+                tg_edit(chat_id, msg_id,
+                        f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n"
+                        f"⚠️ DRIVERS sayfasında aktif şoför bulunamadı. "
+                        f"Lütfen Sheets'te manuel atama yapın.")
+            else:
+                # Şoför butonu: callback_data max 64 byte → DRV_ID kısa tutuyoruz
+                buttons = []
+                for d in drivers:
+                    drv_id   = str(d.get('DRIVER_ID', ''))
+                    drv_name = d.get('DRIVER_NAME', 'İsimsiz')
+                    supplier = d.get('SUPPLIER_NAME', '')
+                    label    = f"🚗 {drv_name} ({supplier})"
+                    # Format: drv_DRIVERID_VOUCHER  (voucher max 13 char → safe)
+                    cb       = f"drv_{drv_id}_{voucher}"
+                    buttons.append([{'text': label, 'callback_data': cb}])
+
+                tg_edit(chat_id, msg_id,
+                        f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n"
+                        f"👇 Şoför seçin:")
+                tg_send(chat_id,
+                        f"🚌 <b>{voucher}</b> için şoför atayın:",
+                        markup={'inline_keyboard': buttons})
+
+        elif cbd.startswith('drv_'):
+            # ── Şoför seçildi → Sheets güncelle + şoföre bildir ────────
+            parts   = cbd.split('_', 2)   # ['drv', DRIVER_ID, VOUCHER]
+            drv_id  = parts[1] if len(parts) > 1 else ''
+            voucher = parts[2] if len(parts) > 2 else ''
+
+            # Şoför bilgilerini DRIVERS listesinden bul
+            drivers = get_drivers()
+            driver  = next((d for d in drivers
+                            if str(d.get('DRIVER_ID','')) == drv_id), None)
+
+            if not driver:
+                tg_edit(chat_id, msg_id, f"❌ Şoför bulunamadı (ID: {drv_id})")
+            else:
+                drv_name  = driver.get('DRIVER_NAME', '')
+                drv_phone = driver.get('DRIVER_PHONE', '')
+                supplier  = driver.get('SUPPLIER_NAME', '')
+                drv_tgid  = driver.get('TELEGRAM_ID', '')
+
+                # Google Sheets güncelle
+                try:
+                    requests.post(SCRIPT_URL, json={
+                        'action':            'update_status',
+                        'voucher':           voucher,
+                        'TRANSFER_STATUS':   'ASSIGNED',
+                        'SUPPLIER_NAME':     supplier,
+                        'DRIVER_NAME':       drv_name,
+                        'DRIVER_PHONE':      drv_phone,
+                    }, timeout=15)
+                except Exception:
+                    pass
+
+                # Admin mesajını güncelle
+                tg_edit(chat_id, msg_id,
+                        f"✅ <b>ŞOFÖR ATANDI</b>\n"
+                        f"🎫 Voucher: <code>{voucher}</code>\n"
+                        f"🚗 Şoför: <b>{drv_name}</b>\n"
+                        f"📞 Telefon: {drv_phone}\n"
+                        f"🏢 Firma: {supplier}")
+
+                # Şoföre Telegram bildirimi (TELEGRAM_ID varsa)
+                if drv_tgid:
+                    drv_msg = (
+                        f"🚌 <b>YENİ TRANSFER GÖREVİ</b>\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n"
+                        f"👤 <b>Şoför:</b> {drv_name}\n\n"
+                        f"Lütfen rezervasyon detayları için yöneticinizle iletişime geçin."
+                    )
+                    tg_send(drv_tgid, drv_msg)
 
         elif cbd.startswith('reject_'):
             voucher = cbd[len('reject_'):]
