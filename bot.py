@@ -32,60 +32,73 @@ SYSTEM_PROMPT = """Sen BRIX TRAVEL / Voitrip şirketinin profesyonel transfer re
 ━━ TRANSFER TİPLERİ ━━━━━━━━━━━━━━━━━━━━━━━
 
 🛬 ARRIVAL (Varış Transferi):
-   → Havalimanından → Otele / Adrese
+   → Havalimanından → Otel / Adres
    → Yolcu uçaktan iniyor, havalimanından alınıyor
-   → FROM: Havalimanı kodu (AYT, BJV, GNY, SAW...)
-   → TO: Otel adı veya adres
+   → FROM: Havalimanı kodu (AYT, BJV, GNY, SAW, ESB, ADB...)
+   → TO: Otel adı veya tam adres
    → UÇUŞ SAATİ: Uçağın VARIŞ (iniş) saati
-   → PICKUP TIME: Varış saatiyle AYNI — ayrıca sorma!
+   → PICKUP TIME: Varış saatiyle AYNI → AYRIYETEN SORMA!
 
 🛫 DEPARTURE (Gidiş Transferi):
-   → Otelden / Adresten → Havalimanına
+   → Otel / Adresten → Havalimanına
    → Yolcu uçağa binecek, otelden alınıyor
-   → FROM: Otel adı veya adres
+   → FROM: Otel adı veya tam adres
    → TO: Havalimanı kodu
    → UÇUŞ SAATİ: Uçağın KALKIŞ saati
-   → PICKUP TIME: Otelden alınış saati (uçuştan genellikle 2-3 saat önce)
-     → Kullanıcı bilmiyorsa: "Boş bırakabiliriz, admin sonra ekler" de
+   → PICKUP TIME: Otelden alınış saati — bilmiyorsa boş bırak
 
 ━━ SORU SIRASI ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1. Transfer tipi: ARRIVAL mı DEPARTURE mı?
-2. FROM ve TO (tipe göre)
+2. FROM ve TO (tipe göre — otel/havalimanı)
 3. Tarih (GG.AA.YYYY)
 4. Uçuş numarası ve uçuş saati
 5. SADECE DEPARTURE ise: Otelden alınış saati (pickup) — bilmiyorsa boş bırak
-6. Otel/adres tam adı
-7. Yolcu tam adı ve telefon numarası
-8. Kişi sayısı: yetişkin / çocuk / bebek
-9. Satış fiyatı ve döviz (EUR / USD / TRY)
+6. Yolcu tam adı ve telefon numarası
+7. Kişi sayısı: yetişkin / çocuk / bebek
+8. Satış fiyatı ve döviz (EUR / USD / TRY)
+
+NOT: Ayrıca "otel/adres" diye tekrar SORMA — TO (ARRIVAL) veya FROM (DEPARTURE) zaten otel/adres bilgisini içeriyor.
 
 ━━ KRİTİK KURALLAR ━━━━━━━━━━━━━━━━━━━━━━━
 
-• JOB alanını KESINLIKLE doğru yaz: ARRIVAL veya DEPARTURE
+• JOB alanını KESINLIKLE doğru belirle: ARRIVAL veya DEPARTURE
 • Kullanıcı "varış / geliş / arrival" diyorsa → ARRIVAL
-• Kullanıcı "gidiş / kalkış / dönüş uçuşu / departure" diyorsa → DEPARTURE
-• ARRIVAL'da pickup time sorusu SORMA — uçuş saatiyle aynıdır
+• Kullanıcı "gidiş / kalkış / departure" diyorsa → DEPARTURE
+• ARRIVAL'da pickup time SORMA — uçuş saatiyle aynıdır
 • Bilgi uydurmadan, kullanıcının yazdığı değerleri aynen kullan
 
-━━ REZERVASYON ÖZETİ ━━━━━━━━━━━━━━━━━━━━━
+━━ ONAY VE DÖNÜŞ AKIŞI ━━━━━━━━━━━━━━━━━━━
 
-Tüm bilgiler tamamlandığında şu formatta özet göster:
+1) Tüm bilgiler tamam → özet göster:
 
 ✅ Rezervasyon Özeti:
 ━━━━━━━━━━━━━━━━
-📍 Transfer: [ARRIVAL/DEPARTURE] | [FROM] → [TO]
+📍 [ARRIVAL/DEPARTURE] | [FROM] → [TO]
 📅 Tarih: [TARİH]
-✈️ Uçuş: [UCUS NO] saat [UÇUŞ SAATİ]
-🕐 Pickup: [PICKUP SAATİ veya "—"]
-🏨 Otel/Adres: [OTEL/ADRES]
-👤 Yolcu: [YOLCU ADI] | [TELEFON]
-👥 [Y] yetişkin / [Ç] çocuk / [B] bebek
-💰 Fiyat: [FİYAT] [DÖVİZ]
+✈️ Uçuş: [UCUS NO] [UÇUŞ SAATİ]
+🕐 Pickup: [PICKUP veya —]
+👤 [YOLCU] | [TELEFON]
+👥 [Y]Y / [Ç]Ç / [B]B
+💰 [FİYAT] [DÖVİZ]
 ━━━━━━━━━━━━━━━━
-Onaylıyor musunuz? (Evet / Hayır)
+Onaylıyor musunuz?
 
-Kullanıcı onayladığında (evet/onayla/tamam/ok) sadece şunu yaz: REZERVASYON_ONAYLANDI
+2) Kullanıcı onayladığında (evet/onayla/tamam/ok) → HEMEN kaydetme!
+   Önce şunu sor:
+   "🔄 Dönüş transferi de oluşturmak ister misiniz?"
+
+3a) Kullanıcı dönüş İSTEMİYORSA (hayır/istemiyorum/yok) → sadece şunu yaz:
+    REZERVASYON_ONAYLANDI
+
+3b) Kullanıcı dönüş İSTİYORSA:
+    - Dönüş transfer tipi otomatik tersine döner (ARRIVAL↔DEPARTURE)
+    - Dönüş tarihini sor (GG.AA.YYYY)
+    - Dönüş uçuş no ve saatini sor
+    - Eğer dönüş DEPARTURE ise: alınış saatini sor (bilmiyorsa boş bırak)
+    - Kısa dönüş özeti göster
+    - Sonra şunu yaz: REZERVASYON_ONAYLANDI
+
 Düzeltme isterse düzelt ve özeti tekrar göster."""
 
 # ── Tool definition for structured field extraction ───────────────────
@@ -93,18 +106,17 @@ EXTRACT_TOOL = [{
     "type": "function",
     "function": {
         "name": "update_fields",
-        "description": "Rezervasyon bilgilerini çıkar.",
+        "description": "Rezervasyon bilgilerini ve varsa dönüş transfer bilgilerini çıkar.",
         "parameters": {
             "type": "object",
             "properties": {
-                "job":      {"type": "string", "description": "ARRIVAL veya DEPARTURE — kesinlikle biri olmalı"},
+                "job":      {"type": "string", "description": "ARRIVAL veya DEPARTURE"},
                 "from":     {"type": "string"},
                 "to":       {"type": "string"},
                 "tarih":    {"type": "string"},
                 "ucus":     {"type": "string"},
                 "saat":     {"type": "string"},
                 "pickup":   {"type": "string"},
-                "hotel":    {"type": "string"},
                 "yolcu":    {"type": "string"},
                 "telefon":  {"type": "string"},
                 "yetiskin": {"type": "string"},
@@ -112,7 +124,12 @@ EXTRACT_TOOL = [{
                 "bebek":    {"type": "string"},
                 "fiyat":    {"type": "string"},
                 "doviz":    {"type": "string"},
-                "not":      {"type": "string"}
+                "not":      {"type": "string"},
+                "has_return":     {"type": "string", "description": "Dönüş transferi var mı? 'evet' veya 'hayir'"},
+                "return_tarih":   {"type": "string", "description": "Dönüş transfer tarihi GG.AA.YYYY"},
+                "return_ucus":    {"type": "string", "description": "Dönüş uçuş numarası"},
+                "return_saat":    {"type": "string", "description": "Dönüş uçuş saati"},
+                "return_pickup":  {"type": "string", "description": "Dönüş için pickup saati (sadece DEPARTURE dönüş ise)"}
             },
             "required": []
         }
@@ -377,37 +394,43 @@ def _save_return_transfer(chat_id, voucher):
 # ── AI chat fields extractor ──────────────────────────────────────────
 def extract_fields_from_history(messages):
     """
-    Kullanıcı mesajlarından veri çıkar.
-    JOB alanı için onaylanan özeti (assistant) de kullan — ARRIVAL/DEPARTURE doğru alınsın.
+    Tüm konuşmadan hem orijinal hem dönüş transfer bilgilerini çıkar.
+    JOB alanı için onaylanan özeti (assistant) de kullan.
+    Returns: (original_fields, return_fields_or_None)
     """
-    user_lines   = []
-    final_summary= ''
+    user_lines    = []
+    asst_summaries= []
 
     for m in messages:
         role    = m.get('role', '')
         content = m.get('content', '')
         if role == 'user':
             user_lines.append(content)
-        elif role == 'assistant' and 'REZERVASYON_ONAYLANDI' in content:
-            final_summary = content
+        elif role == 'assistant' and content:
+            asst_summaries.append(content)
 
     if not user_lines:
-        return {}
+        return {}, None
 
-    user_text = '\n'.join(f'- {line}' for line in user_lines)
-    context   = f'Kullanıcı mesajları:\n{user_text}'
-    if final_summary:
-        context += f'\n\nOnaylanan rezervasyon özeti (JOB tipi için bu özeti kullan):\n{final_summary}'
+    user_text = '\n'.join(f'U: {line}' for line in user_lines)
+    asst_text = '\n'.join(f'A: {s}' for s in asst_summaries[-4:])  # son 4 asst mesajı yeterli
+
+    context = (
+        f'Tam konuşma (U=kullanıcı, A=asistan):\n{asst_text}\n{user_text}\n\n'
+        f'Görev: Orijinal transfer bilgilerini VE eğer kullanıcı dönüş transferi istediyse '
+        f'dönüş bilgilerini çıkar. has_return="evet" ise return_tarih, return_ucus, return_saat doldur.'
+    )
 
     extraction_messages = [
         {
             'role': 'system',
             'content': (
                 'Transfer rezervasyon bilgilerini çıkar. '
-                'Kullanıcı mesajlarından gerçek değerleri al. '
-                'JOB alanı için onaylanan özeti kullan: "ARRIVAL" veya "DEPARTURE" yaz. '
-                'KURAL: Soru cümlelerini veya AI metin parçalarını değer olarak kaydetme. '
-                'Kullanıcı bir bilgiyi vermemişse o alanı boş bırak.'
+                'JOB kesinlikle "ARRIVAL" veya "DEPARTURE" olmalı — asistan özetinden al. '
+                'Dönüş transferi istenip istenmediğini tespit et: '
+                'Kullanıcı "evet dönüş/istiyorum/dönüş oluştur" dediyse has_return="evet". '
+                'has_return="evet" ise return_tarih, return_ucus, return_saat alanlarını doldur. '
+                'Soru cümlelerini veya AI metin parçalarını değer olarak KAYDETME.'
             )
         },
         {'role': 'user', 'content': context}
@@ -419,15 +442,59 @@ def extract_fields_from_history(messages):
             messages=extraction_messages,
             tools=EXTRACT_TOOL,
             tool_choice={'type': 'function', 'function': {'name': 'update_fields'}},
-            max_tokens=300
+            max_tokens=400
         )
         tc = resp.choices[0].message.tool_calls
-        if tc:
-            fields = json.loads(tc[0].function.arguments)
-            return {k: v for k, v in fields.items() if v and str(v).strip()}
+        if not tc:
+            return {}, None
+
+        all_fields = json.loads(tc[0].function.arguments)
+        all_fields = {k: v for k, v in all_fields.items() if v and str(v).strip()}
+
+        # Split original vs return
+        return_keys = {'has_return', 'return_tarih', 'return_ucus', 'return_saat', 'return_pickup'}
+        orig = {k: v for k, v in all_fields.items() if k not in return_keys}
+        ret  = {k: v for k, v in all_fields.items() if k in return_keys}
+
+        # Auto-derive hotel from to/from (no separate hotel question)
+        job = orig.get('job', 'ARRIVAL').upper()
+        if job == 'ARRIVAL':
+            orig['hotel'] = orig.get('to', '')
+        else:
+            orig['hotel'] = orig.get('from', '')
+
+        has_return = ret.get('has_return', 'hayir').lower() == 'evet'
+        return_fields = None
+        if has_return and ret.get('return_tarih'):
+            orig_job    = orig.get('job', 'ARRIVAL').upper()
+            return_job  = 'DEPARTURE' if orig_job == 'ARRIVAL' else 'ARRIVAL'
+            ret_saat    = ret.get('return_saat', '')
+            ret_pickup  = ret.get('return_pickup', '')
+            if return_job == 'ARRIVAL':
+                ret_pickup = ret_saat  # ARRIVAL → pickup = flight time
+            return_fields = {
+                'job':      return_job,
+                'from':     orig.get('to', ''),    # swapped
+                'to':       orig.get('from', ''),  # swapped
+                'hotel':    orig.get('hotel', ''),
+                'tarih':    ret.get('return_tarih', ''),
+                'ucus':     ret.get('return_ucus', ''),
+                'saat':     ret_saat,
+                'pickup':   ret_pickup,
+                'yolcu':    orig.get('yolcu', ''),
+                'telefon':  orig.get('telefon', ''),
+                'yetiskin': orig.get('yetiskin', '1'),
+                'cocuk':    orig.get('cocuk', '0'),
+                'bebek':    orig.get('bebek', '0'),
+                'fiyat':    orig.get('fiyat', ''),
+                'doviz':    orig.get('doviz', 'EUR'),
+            }
+
+        return orig, return_fields
+
     except Exception:
         pass
-    return {}
+    return {}, None
 
 # ── Static routes ─────────────────────────────────────────────────────
 MOCKUP_PORT = 23636
@@ -487,71 +554,79 @@ def api_chat():
                     f"❓ <b>MÜŞTERİ SORUSU (Web)</b>\n\n<i>{last_user}</i>\n\n"
                     f"Müşteri cevap bekliyor.")
 
-        fields = extract_fields_from_history(
-            full_messages + [{'role': 'assistant', 'content': reply}]
-        )
-        return jsonify({'reply': reply, 'confirmed': confirmed, 'fields': fields})
+        all_msgs = full_messages + [{'role': 'assistant', 'content': reply}]
+        orig_fields, return_fields = extract_fields_from_history(all_msgs)
+        resp_data = {'reply': reply, 'confirmed': confirmed, 'fields': orig_fields}
+        if return_fields:
+            resp_data['return_fields'] = return_fields
+            resp_data['has_return'] = True
+        return jsonify(resp_data)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 # ── Web: Reserve ──────────────────────────────────────────────────────
+def _build_sheets_payload(fields, voucher, staff='WEB', now_str=''):
+    """Build sheets dict from normalized fields dict."""
+    if not now_str:
+        now_str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    job    = (fields.get('job') or 'ARRIVAL').upper()
+    saat   = fields.get('saat', '')
+    pickup = fields.get('pickup', '') or calc_pickup(saat, job)
+    # Auto-derive hotel: ARRIVAL → TO is the hotel; DEPARTURE → FROM is the hotel
+    hotel  = fields.get('hotel', '') or (fields.get('to','') if job == 'ARRIVAL' else fields.get('from',''))
+    return {
+        'VOUCHER':          voucher,
+        'DATE':             fields.get('tarih', ''),
+        'OPERATOR':         'BRIX TRAVEL',
+        'JOB':              job,
+        'FROM':             fields.get('from', ''),
+        'TO':               fields.get('to', ''),
+        'HOTEL_ADRESS':     hotel,
+        'FLIGHT_COD':       fields.get('ucus', ''),
+        'FLIGHT_TIME':      saat,
+        'PICKUP_TIME':      pickup,
+        'PASSANGER_NAME':   fields.get('yolcu', ''),
+        'PASSANGER_PHONE':  fields.get('telefon', ''),
+        'ADULT':            fields.get('yetiskin', '1'),
+        'CHILD':            fields.get('cocuk', '0'),
+        'INF':              fields.get('bebek', '0'),
+        'SALE_PRICE':       fields.get('fiyat', ''),
+        'SALE_CURE':        fields.get('doviz', 'EUR'),
+        'NOTE_1':           fields.get('not', ''),
+        'RESERVATION_STATUS': 'NEW',
+        'RESERVATION_STAFF':  staff,
+        'RESERVATION_DATE':   now_str,
+    }
+
 @app.route('/api/reserve', methods=['POST'])
 def api_reserve():
     data    = request.get_json(force=True)
+    now_str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
     voucher = data.get('voucher') or generate_voucher()
-    data['voucher'] = voucher
 
-    job    = (data.get('job') or 'ARRIVAL').upper()
-    saat   = data.get('saat', '')
-    pickup = data.get('pickup', '') or calc_pickup(saat, job)
-    now_str= datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    # Auto-derive hotel field if not provided
+    job = (data.get('job') or 'ARRIVAL').upper()
+    if not data.get('hotel'):
+        data['hotel'] = data.get('to','') if job == 'ARRIVAL' else data.get('from','')
 
-    sheets_payload = {
-        'VOUCHER':          voucher,
-        'DATE':             data.get('tarih', ''),
-        'OPERATOR':         'BRIX TRAVEL',
-        'JOB':              job,
-        'FROM':             data.get('from', ''),
-        'TO':               data.get('to', ''),
-        'HOTEL_ADRESS':     data.get('hotel', ''),
-        'FLIGHT_COD':       data.get('ucus', ''),
-        'FLIGHT_TIME':      saat,
-        'PICKUP_TIME':      pickup,
-        'PASSANGER_NAME':   data.get('yolcu', ''),
-        'PASSANGER_PHONE':  data.get('telefon', ''),
-        'ADULT':            data.get('yetiskin', '1'),
-        'CHILD':            data.get('cocuk', '0'),
-        'INF':              data.get('bebek', '0'),
-        'SALE_PRICE':       data.get('fiyat', ''),
-        'SALE_CURE':        data.get('doviz', 'EUR'),
-        'NOTE_1':           data.get('not', ''),
-        'RESERVATION_STATUS': 'NEW',
-        'RESERVATION_STAFF':  'WEB',
-        'RESERVATION_DATE':   now_str,
-    }
-    sheets_reserve(sheets_payload)
+    sheets_reserve(_build_sheets_payload(data, voucher, staff='WEB', now_str=now_str))
     notify_admin(data, voucher, source='🌐 WEB')
 
-    # Build return transfer template (swapped direction)
-    return_job = 'DEPARTURE' if job == 'ARRIVAL' else 'ARRIVAL'
-    return_template = {
-        'job':      return_job,
-        'from':     data.get('to', ''),    # swapped
-        'to':       data.get('from', ''),  # swapped
-        'hotel':    data.get('hotel', ''),
-        'yolcu':    data.get('yolcu', ''),
-        'telefon':  data.get('telefon', ''),
-        'yetiskin': data.get('yetiskin', '1'),
-        'cocuk':    data.get('cocuk', '0'),
-        'bebek':    data.get('bebek', '0'),
-        'fiyat':    data.get('fiyat', ''),
-        'doviz':    data.get('doviz', 'EUR'),
-    }
+    ret_voucher = None
+    # Save return transfer if provided in the same request
+    return_fields = data.get('return_fields')
+    if return_fields and return_fields.get('tarih'):
+        ret_voucher = generate_voucher()
+        sheets_reserve(_build_sheets_payload(return_fields, ret_voucher, staff='WEB', now_str=now_str))
+        notify_admin(return_fields, ret_voucher, source='🔄 DÖNÜŞ (WEB)')
 
-    return jsonify({'status': 'ok', 'voucher': voucher,
-                    'return_template': return_template}), 200
+    resp = {'status': 'ok', 'voucher': voucher}
+    if ret_voucher:
+        resp['return_voucher'] = ret_voucher
+
+    return jsonify(resp), 200
 
 
 # ── Web: Check ────────────────────────────────────────────────────────
@@ -769,56 +844,36 @@ def _handle_message(msg):
             return
 
         if 'REZERVASYON_ONAYLANDI' in reply:
-            fields  = extract_fields_from_history(full_msgs)
-            voucher = generate_voucher()
-            job     = (fields.get('job') or 'ARRIVAL').upper()
-            saat    = fields.get('saat', '')
-            pickup  = fields.get('pickup', '') or calc_pickup(saat, job)
+            orig_fields, return_fields = extract_fields_from_history(full_msgs)
             now_str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+            voucher = generate_voucher()
 
-            sheets_reserve({
-                'VOUCHER': voucher, 'DATE': fields.get('tarih',''),
-                'OPERATOR': 'BRIX TRAVEL', 'JOB': job,
-                'FROM': fields.get('from',''), 'TO': fields.get('to',''),
-                'HOTEL_ADRESS': fields.get('hotel',''),
-                'FLIGHT_COD': fields.get('ucus',''), 'FLIGHT_TIME': saat,
-                'PICKUP_TIME': pickup,
-                'PASSANGER_NAME': fields.get('yolcu',''),
-                'PASSANGER_PHONE': fields.get('telefon',''),
-                'ADULT': fields.get('yetiskin','1'), 'CHILD': fields.get('cocuk','0'),
-                'INF': fields.get('bebek','0'),
-                'SALE_PRICE': fields.get('fiyat',''), 'SALE_CURE': fields.get('doviz','EUR'),
-                'NOTE_1': fields.get('not',''), 'RESERVATION_STATUS': 'NEW',
-                'RESERVATION_STAFF': 'TG', 'RESERVATION_DATE': now_str,
-            })
-            notify_admin(fields, voucher, source='📱 TELEGRAM')
+            # Save original
+            sheets_reserve(_build_sheets_payload(orig_fields, voucher, staff='TG', now_str=now_str))
+            notify_admin(orig_fields, voucher, source='📱 TELEGRAM')
             tg_sessions.pop(str(chat_id), None)
 
-            # Store data for potential return transfer
-            return_job   = 'DEPARTURE' if job == 'ARRIVAL' else 'ARRIVAL'
-            return_emoji = '🛫' if return_job == 'DEPARTURE' else '🛬'
-            return_desc  = 'Otel → Havalimanı' if return_job == 'DEPARTURE' else 'Havalimanı → Otel'
-            pending_return_data[voucher] = {
-                'original_job': job,
-                'from': fields.get('from',''), 'to': fields.get('to',''),
-                'hotel': fields.get('hotel',''), 'yolcu': fields.get('yolcu',''),
-                'telefon': fields.get('telefon',''), 'yetiskin': fields.get('yetiskin','1'),
-                'cocuk': fields.get('cocuk','0'), 'bebek': fields.get('bebek','0'),
-                'fiyat': fields.get('fiyat',''), 'doviz': fields.get('doviz','EUR'),
-            }
+            job = (orig_fields.get('job') or 'ARRIVAL').upper()
 
-            kb = {'inline_keyboard': [[
-                {'text': f'🔄 EVET, DÖNÜŞ OLUŞTUR ({return_job})',
-                 'callback_data': f'retyes_{voucher}'},
-                {'text': '❌ HAYIR', 'callback_data': f'retno_{voucher}'}
-            ]]}
-            tg_send(chat_id,
-                    f"✅ <b>Rezervasyon Kaydedildi!</b>\n\n"
-                    f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n\n"
-                    f"🔄 <b>Dönüş transferi oluşturmak ister misiniz?</b>\n"
-                    f"{return_emoji} {return_job} — {return_desc}\n"
-                    f"👤 {fields.get('yolcu','')} — yolcu bilgileri otomatik aktarılır",
-                    markup=kb)
+            # Save return transfer if user requested it in conversation
+            if return_fields and return_fields.get('tarih'):
+                ret_voucher = generate_voucher()
+                sheets_reserve(_build_sheets_payload(return_fields, ret_voucher, staff='TG', now_str=now_str))
+                notify_admin(return_fields, ret_voucher, source='🔄 DÖNÜŞ (TG)')
+                ret_job   = return_fields.get('job', '')
+                ret_emoji = '🛫' if ret_job == 'DEPARTURE' else '🛬'
+                tg_send(chat_id,
+                        f"✅ <b>İki Rezervasyon Kaydedildi!</b>\n\n"
+                        f"🎫 <b>Gidiş:</b> <code>{voucher}</code>\n"
+                        f"🎫 <b>Dönüş:</b> <code>{ret_voucher}</code>\n\n"
+                        f"{ret_emoji} {ret_job} | {return_fields.get('from','')} → {return_fields.get('to','')}\n"
+                        f"📅 {return_fields.get('tarih','')} | ✈️ {return_fields.get('ucus','')} {return_fields.get('saat','')}\n\n"
+                        f"Admin'e bildirimler gönderildi.")
+            else:
+                tg_send(chat_id,
+                        f"✅ <b>Rezervasyon Kaydedildi!</b>\n\n"
+                        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n\n"
+                        f"Admin'e bildirim gönderildi.")
             return
 
         tg_send(chat_id, reply)

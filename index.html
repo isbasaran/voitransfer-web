@@ -340,8 +340,12 @@ async function sendMessage() {
       addMsg('❌ Hata: '+data.error, 'bot', 'chatMessages');
     } else if (data.confirmed || (data.reply&&data.reply.includes('REZERVASYON_ONAYLANDI'))) {
       history.push({role:'assistant', content: data.reply});
-      addMsg('✅ Rezervasyon onaylandı, kaydediliyor...', 'bot', 'chatMessages');
-      await saveReservation();
+      mergeFields(data.fields);
+      // Show clean confirmation msg (strip keyword from display)
+      const cleanReply = data.reply.replace('REZERVASYON_ONAYLANDI','').trim();
+      if (cleanReply) addMsg(cleanReply, 'bot', 'chatMessages');
+      addMsg('⏳ Rezervasyon kaydediliyor...', 'bot', 'chatMessages');
+      await saveReservation(data.return_fields || null);
     } else {
       addMsg(data.reply, 'bot', 'chatMessages');
       history.push({role:'assistant', content: data.reply});
@@ -359,17 +363,21 @@ async function sendMessage() {
 }
 
 // ─── SAVE RESERVATION ─────────────────────────────────────────────
-async function saveReservation() {
+async function saveReservation(returnFields) {
   const btn = document.getElementById('confirmBtn');
   if (btn) {btn.disabled=true; btn.textContent='⏳ Kaydediliyor...';}
+  const job = res.job || 'ARRIVAL';
   const payload = {
-    tarih: res.tarih||'', operator:'BRIX TRAVEL', job: res.job||'ARRIVAL',
-    from: res.from||'', to: res.to||'', hotel: res.hotel||'',
+    tarih: res.tarih||'', job,
+    from: res.from||'', to: res.to||'',
     ucus: res.ucus||'', saat: res.saat||'', pickup: res.pickup||'',
     yolcu: res.yolcu||'', telefon: res.telefon||'',
     yetiskin: res.yetiskin||'1', cocuk: res.cocuk||'0', bebek: res.bebek||'0',
     fiyat: res.fiyat||'', doviz: res.doviz||res['döviz']||'EUR', not: res.not||''
   };
+  if (returnFields && returnFields.tarih) {
+    payload.return_fields = returnFields;
+  }
   try {
     const r = await fetch('/api/reserve', {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
@@ -378,36 +386,22 @@ async function saveReservation() {
     if (r.ok && data.voucher) {
       lastVC = data.voucher;
       res.voucher = data.voucher;
-      // Insert voucher badge at top of summary
       const sc = document.getElementById('summaryContainer');
       const badge = document.createElement('div');
       badge.className = 'vc-badge';
-      badge.innerHTML = `<div style="color:rgba(16,185,129,.8);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">✅ Kaydedildi</div><div style="color:#6ee7b7;font-size:.95rem;font-weight:700;letter-spacing:.06em;">${data.voucher}</div>`;
+
+      let successMsg = `✅ Rezervasyon başarıyla kaydedildi!\n🎫 Voucher: ${data.voucher}`;
+      if (data.return_voucher) {
+        successMsg += `\n🔄 Dönüş Voucher: ${data.return_voucher}`;
+        badge.innerHTML = `<div style="color:rgba(16,185,129,.8);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">✅ 2 Rezervasyon Kaydedildi</div><div style="color:#6ee7b7;font-size:.88rem;font-weight:700;">${data.voucher}</div><div style="color:#93c5fd;font-size:.78rem;">🔄 ${data.return_voucher}</div>`;
+      } else {
+        badge.innerHTML = `<div style="color:rgba(16,185,129,.8);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">✅ Kaydedildi</div><div style="color:#6ee7b7;font-size:.95rem;font-weight:700;letter-spacing:.06em;">${data.voucher}</div>`;
+      }
+      successMsg += '\n\n📱 Admin\'e Telegram bildirimi gönderildi.\n📄 PDF almak için → "PDF İndir" butonu';
       sc.insertBefore(badge, sc.firstChild);
-      addMsg(`✅ Rezervasyon başarıyla kaydedildi!\n🎫 Voucher: ${data.voucher}\n\n📱 Admin'e Telegram bildirimi gönderildi.\n📄 PDF almak için → "PDF İndir" butonu`, 'success', 'chatMessages');
+      addMsg(successMsg, 'success', 'chatMessages');
       document.getElementById('pdfBtn').style.display = 'block';
       if (btn) btn.style.display = 'none';
-
-      // Return transfer suggestion
-      if (data.return_template) {
-        returnTemplate = data.return_template;
-        const rt = returnTemplate;
-        const retJob   = rt.job || (res.job === 'ARRIVAL' ? 'DEPARTURE' : 'ARRIVAL');
-        const retEmoji = retJob === 'DEPARTURE' ? '🛫' : '🛬';
-        const retDesc  = retJob === 'DEPARTURE' ? 'Otel → Havalimanı' : 'Havalimanı → Otel';
-
-        const retDiv = document.createElement('div');
-        retDiv.style.cssText = 'background:linear-gradient(135deg,rgba(139,92,246,.14),rgba(59,130,246,.1));border:1px solid rgba(139,92,246,.28);border-radius:10px;padding:10px 12px;margin-top:4px;';
-        retDiv.innerHTML = `
-          <div style="color:rgba(255,255,255,.55);font-size:.7rem;margin-bottom:6px;">🔄 Dönüş transferi oluşturmak ister misiniz?</div>
-          <div style="color:#c4b5fd;font-size:.78rem;font-weight:600;margin-bottom:8px;">${retEmoji} ${retJob} — ${retDesc}<br><span style="color:rgba(255,255,255,.45);font-weight:400;">${rt.from} → ${rt.to} | ${rt.yolcu||''}</span></div>
-          <div style="display:flex;gap:6px;">
-            <button onclick="startReturnTransfer()" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.75rem;font-weight:600;cursor:pointer;">🔄 Evet, Dönüş Oluştur</button>
-            <button onclick="this.closest('div[style]').remove()" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:7px 12px;font-size:.75rem;cursor:pointer;">✕ Hayır</button>
-          </div>`;
-        document.getElementById('chatMessages').appendChild(retDiv);
-        document.getElementById('chatMessages').scrollTop = 99999;
-      }
     } else {
       addMsg('❌ Kayıt hatası: '+(data.error||'Bilinmeyen'), 'bot', 'chatMessages');
       if (btn) {btn.disabled=false; btn.textContent='✅ Onayla ve Kaydet';}
