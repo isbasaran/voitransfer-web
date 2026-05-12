@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/api/chat", "destination": "/api/chat" },
+    { "source": "/api/check", "destination": "/api/check" },
+    { "source": "/api/edit", "destination": "/api/edit" },
+    { "source": "/api/cancel", "destination": "/api/cancel" },
+    { "source": "/api/reserve", "destination": "/api/reserve" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

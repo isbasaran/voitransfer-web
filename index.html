@@ -39,7 +39,7 @@ Value').value.trim();
             };
 
             try {
-                const resp = await fetch('/webhook', {
+                const resp = await fetch('/api/reserve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -79,7 +79,7 @@ Value').value.trim();
             addChatMessage('🔍 ' + voucher + ' kontrol ediliyor...', 'bot', 'chatMessagesCheck');
 
             try {
-                const resp = await fetch('/webhook/check?voucher=' + encodeURIComponent(voucher));
+                const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
                 const data = await resp.json();
 
                 if (data && data.voucher) {
@@ -121,7 +121,7 @@ Value').value.trim();
             addChatMessage('⏳ ' + voucher + ' yükleniyor...', 'bot', 'chatMessagesEdit');
 
             try {
-                const resp = await fetch('/webhook/check?voucher=' + encodeURIComponent(voucher));
+                const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
                 const data = await resp.json();
 
                 if (data && data.voucher) {
@@ -177,7 +177,7 @@ Value').value.trim();
             };
 
             try {
-                const resp = await fetch('/webhook/edit', {
+                const resp = await fetch('/api/edit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -202,7 +202,7 @@ Value').value.trim();
             if (!confirm('⚠️ ' + voucher + ' numaralı rezervasyonu iptal etmek istiyor musun?')) return;
 
             try {
-                const resp = await fetch('/webhook/cancel', {
+                const resp = await fetch('/api/cancel', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voucher })

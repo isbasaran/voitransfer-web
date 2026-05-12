@@ -47,50 +47,47 @@ def api_chat():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
+@app.route('/api/reserve', methods=['POST'])
+def api_reserve():
     data = request.get_json(force=True)
     try:
-        resp = requests.post(SCRIPT_URL, json=data, timeout=15)
+        requests.post(SCRIPT_URL, json=data, timeout=15)
         return jsonify({'status': 'ok'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/webhook/check', methods=['GET'])
-def webhook_check():
+@app.route('/api/check', methods=['GET'])
+def api_check():
     voucher = request.args.get('voucher', '').upper().strip()
     if not voucher:
         return jsonify({'error': 'Voucher gerekli'}), 400
     try:
         resp = requests.get(SCRIPT_URL, params={'action': 'check', 'voucher': voucher}, timeout=15)
-        data = resp.json()
-        return jsonify(data)
+        return jsonify(resp.json())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/webhook/edit', methods=['POST'])
-def webhook_edit():
+@app.route('/api/edit', methods=['POST'])
+def api_edit():
     data = request.get_json(force=True)
     if not data or not data.get('voucher'):
         return jsonify({'error': 'Voucher gerekli'}), 400
     try:
-        payload = {**data, 'action': 'edit'}
-        requests.post(SCRIPT_URL, json=payload, timeout=15)
+        requests.post(SCRIPT_URL, json={**data, 'action': 'edit'}, timeout=15)
         return jsonify({'status': 'ok', 'message': 'Düzenleme gönderildi'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/webhook/cancel', methods=['POST'])
-def webhook_cancel():
+@app.route('/api/cancel', methods=['POST'])
+def api_cancel():
     data = request.get_json(force=True)
     if not data or not data.get('voucher'):
         return jsonify({'error': 'Voucher gerekli'}), 400
     try:
-        payload = {**data, 'action': 'cancel'}
-        requests.post(SCRIPT_URL, json=payload, timeout=15)
+        requests.post(SCRIPT_URL, json={**data, 'action': 'cancel'}, timeout=15)
         return jsonify({'status': 'ok', 'message': 'İptal talebi gönderildi'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
