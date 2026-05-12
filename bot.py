@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import threading
 import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
@@ -16,11 +17,17 @@ TG            = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
 
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 
-# ── In-memory Telegram conversation state ────────────────────────────
+# ── In-memory state ───────────────────────────────────────────────────
 # {chat_id: [{'role':..,'content':..}, ...]}
 tg_sessions = {}
-# {chat_id: 'awaiting_price_VOUCHER' | 'awaiting_driver_note_VOUCHER'}
+# {chat_id: 'awaiting_price_VOUCHER' | 'awaiting_price_confirm_VOUCHER'}
 tg_pending  = {}
+# {voucher: {'drv_tgid':str, 'drv_name':str, 'res_data':dict, 'timer': Timer}}
+pending_driver_sends = {}
+# {voucher: str}  — fiyat girildi ama henüz gönderilmedi
+pending_prices = {}
+
+PRICE_TIMEOUT = 15 * 60  # 15 dakika (saniye)
 
 # ── System prompt ────────────────────────────────────────────────────
 SYSTEM_PROMPT = """Sen BRIX TRAVEL / Voitrip şirketinin profesyonel transfer rezervasyon asistanısın. Türkçe konuşuyorsun.
@@ -115,6 +122,8 @@ def tg_edit(chat_id, message_id, text, markup=None):
                'text': text, 'parse_mode': 'HTML'}
     if markup:
         payload['reply_markup'] = json.dumps(markup)
+    else:
+        payload['reply_markup'] = json.dumps({})
     try:
         requests.post(f'{TG}/editMessageText', json=payload, timeout=5)
     except Exception:
@@ -187,7 +196,7 @@ def calc_pickup(saat, job):
     except Exception:
         return saat
 
-# ── Admin reservation notification ───────────────────────────────────
+# ── Admin reservation notification (NO price button here) ─────────────
 def notify_admin(data, voucher, source='WEB'):
     job_emoji = '🛬' if data.get('job', '').upper() == 'ARRIVAL' else '🛫'
     msg = (
@@ -206,20 +215,16 @@ def notify_admin(data, voucher, source='WEB'):
         f"📝 <b>Not:</b> {data.get('not', '-') or '-'}\n"
         f"━━━━━━━━━━━━━━━━"
     )
-    kb = {'inline_keyboard': [
-        [
-            {'text': '✅ ONAYLA', 'callback_data': f'approve_{voucher}'},
-            {'text': '❌ RED ET', 'callback_data': f'reject_{voucher}'}
-        ],
-        [
-            {'text': '💰 FİYAT GİR', 'callback_data': f'price_{voucher}'}
-        ]
-    ]}
+    kb = {'inline_keyboard': [[
+        {'text': '✅ ONAYLA', 'callback_data': f'approve_{voucher}'},
+        {'text': '❌ RED ET', 'callback_data': f'reject_{voucher}'}
+    ]]}
     tg_send(ADMIN_CHAT_ID, msg, markup=kb)
 
 # ── Driver notification ───────────────────────────────────────────────
-def notify_driver(drv_tgid, drv_name, voucher, res_data):
+def notify_driver(drv_tgid, drv_name, voucher, res_data, price_text=''):
     job_emoji = '🛬' if res_data.get('JOB', '').upper() == 'ARRIVAL' else '🛫'
+    price_line = f"\n💰 <b>Tedarikçi Fiyatı:</b> {price_text}" if price_text else ''
     msg = (
         f"🚌 <b>YENİ TRANSFER GÖREVİ</b>\n"
         f"━━━━━━━━━━━━━━━\n"
@@ -227,12 +232,15 @@ def notify_driver(drv_tgid, drv_name, voucher, res_data):
         f"{job_emoji} <b>Transfer:</b> {res_data.get('JOB', '')}\n"
         f"📍 <b>Güzergah:</b> {res_data.get('FROM', '')} → {res_data.get('TO', '')}\n"
         f"📅 <b>Tarih:</b> {res_data.get('DATE', '')}\n"
-        f"✈️ <b>Uçuş:</b> {res_data.get('FLIGHT_COD', '')} saat {res_data.get('FLIGHT_TIME', '')}\n"
-        f"🕐 <b>Pickup:</b> {res_data.get('PICKUP_TIME', '')}\n"
-        f"🏨 <b>Otel/Adres:</b> {res_data.get('HOTEL_ADRESS', '')}\n"
-        f"👤 <b>Yolcu:</b> {res_data.get('PASSANGER_NAME', '')}\n"
-        f"📞 <b>Yolcu Tel:</b> {res_data.get('PASSANGER_PHONE', '')}\n"
-        f"👥 <b>Kişi:</b> {res_data.get('ADULT', '1')}Y / {res_data.get('CHILD', '0')}Ç / {res_data.get('INF', '0')}B\n"
+        f"✈️ <b>Uçuş:</b> {res_data.get('FLIGHT COD', res_data.get('FLIGHT_COD', ''))} "
+        f"saat {res_data.get('FLIGHT TIME', res_data.get('FLIGHT_TIME', ''))}\n"
+        f"🕐 <b>Pickup:</b> {res_data.get('PICKUP TIME', res_data.get('PICKUP_TIME', ''))}\n"
+        f"🏨 <b>Otel/Adres:</b> {res_data.get('HOTEL/ADRESS', res_data.get('HOTEL_ADRESS', ''))}\n"
+        f"👤 <b>Yolcu:</b> {res_data.get('PASSANGER NAME', res_data.get('PASSANGER_NAME', ''))}\n"
+        f"📞 <b>Yolcu Tel:</b> {res_data.get('PASSANGER PHONE', res_data.get('PASSANGER_PHONE', ''))}\n"
+        f"👥 <b>Kişi:</b> {res_data.get('ADULT', '1')}Y / "
+        f"{res_data.get('CHILD', '0')}Ç / {res_data.get('INF', '0')}B"
+        f"{price_line}\n"
         f"━━━━━━━━━━━━━━━\n"
         f"👷 <b>Şoför:</b> {drv_name}"
     )
@@ -242,23 +250,53 @@ def notify_driver(drv_tgid, drv_name, voucher, res_data):
     ]]}
     tg_send(drv_tgid, msg, markup=kb)
 
+# ── Auto-send driver notification after timeout ───────────────────────
+def _auto_send_driver(voucher):
+    """15 dk geçti, admin fiyat girmedi → fiyatsız gönder."""
+    info = pending_driver_sends.pop(voucher, None)
+    pending_prices.pop(voucher, None)
+    # Clear any admin pending state
+    for cid, val in list(tg_pending.items()):
+        if voucher in val:
+            tg_pending.pop(cid, None)
+    if not info:
+        return
+    drv_tgid  = info['drv_tgid']
+    drv_name  = info['drv_name']
+    res_data  = info['res_data']
+    if drv_tgid and drv_tgid != 'nan':
+        notify_driver(drv_tgid, drv_name, voucher, res_data, price_text='')
+    tg_send(ADMIN_CHAT_ID,
+            f"⏰ <b>Süre doldu</b> — <code>{voucher}</code>\n"
+            f"Fiyat girilmediği için şoföre <b>fiyatsız</b> gönderildi.")
+
+def _start_price_timer(voucher):
+    """15 dakikalık zamanlayıcı başlat."""
+    info = pending_driver_sends.get(voucher, {})
+    old_timer = info.get('timer')
+    if old_timer:
+        old_timer.cancel()
+    t = threading.Timer(PRICE_TIMEOUT, _auto_send_driver, args=[voucher])
+    t.daemon = True
+    t.start()
+    if voucher in pending_driver_sends:
+        pending_driver_sends[voucher]['timer'] = t
+
+def _cancel_timer(voucher):
+    info = pending_driver_sends.get(voucher, {})
+    t = info.get('timer')
+    if t:
+        t.cancel()
+
 # ── AI chat fields extractor ──────────────────────────────────────────
 def extract_fields_from_history(messages):
-    """
-    Sadece KULLANICI mesajlarından veri çıkar.
-    AI'nın soru metinlerini değer olarak kaydetmez.
-    """
-    # Sadece user mesajlarını al
     user_lines = []
     for m in messages:
         if m.get('role') == 'user':
             user_lines.append(m['content'])
-
     if not user_lines:
         return {}
-
     user_text = '\n'.join(f'- {line}' for line in user_lines)
-
     extraction_messages = [
         {
             'role': 'system',
@@ -275,7 +313,6 @@ def extract_fields_from_history(messages):
             'content': f'Aşağıdaki kullanıcı mesajlarından rezervasyon bilgilerini çıkar:\n\n{user_text}'
         }
     ]
-
     try:
         resp = client.chat.completions.create(
             model='gpt-4o-mini',
@@ -343,7 +380,6 @@ def api_chat():
         confirmed = 'REZERVASYON_ONAYLANDI' in reply
         fallback  = 'FALLBACK_TO_ADMIN' in reply
 
-        # If fallback, notify admin
         if fallback:
             last_user = next((m['content'] for m in reversed(messages)
                               if m['role'] == 'user'), '')
@@ -351,7 +387,6 @@ def api_chat():
                     f"❓ <b>MÜŞTERİ SORUSU (Web)</b>\n\n<i>{last_user}</i>\n\n"
                     f"Müşteri cevap bekliyor. Lütfen web arayüzünden manuel olarak yanıtlayın.")
 
-        # Extract structured fields
         fields = extract_fields_from_history(
             full_messages + [{'role': 'assistant', 'content': reply}]
         )
@@ -396,11 +431,7 @@ def api_reserve():
         'RESERVATION_STAFF':  'WEB',
         'RESERVATION_DATE':   now_str,
     }
-    ok = sheets_reserve(sheets_payload)
-    if not ok:
-        # Don't block user even if sheets has a hiccup
-        pass
-
+    sheets_reserve(sheets_payload)
     notify_admin(data, voucher, source='🌐 WEB')
     return jsonify({'status': 'ok', 'voucher': voucher}), 200
 
@@ -456,13 +487,11 @@ def api_cancel():
 def telegram_webhook():
     update = request.get_json(force=True, silent=True) or {}
 
-    # ── Callback query (button presses) ──────────────────────────────
     cq = update.get('callback_query')
     if cq:
         _handle_callback(cq)
         return jsonify({'ok': True})
 
-    # ── Regular message ───────────────────────────────────────────────
     msg = update.get('message', {})
     if msg:
         _handle_message(msg)
@@ -478,15 +507,27 @@ def _handle_message(msg):
     if not text or not chat_id:
         return
 
-    # ── Check if we're waiting for a specific reply (price, note) ────
+    # ── Bekleyen durum: fiyat girişi ─────────────────────────────────
     pending = tg_pending.get(str(chat_id))
-    if pending:
-        if pending.startswith('awaiting_price_'):
-            voucher = pending[len('awaiting_price_'):]
-            sheets_update({'voucher': voucher, 'SUPPLIER_PRICE': text, 'SUPPLIER_CURRENCY': 'EUR'})
-            tg_send(chat_id, f"✅ <b>{voucher}</b> için tedarikçi fiyatı <b>{text} EUR</b> olarak kaydedildi.")
-            tg_pending.pop(str(chat_id), None)
-            return
+    if pending and pending.startswith('awaiting_price_'):
+        voucher = pending[len('awaiting_price_'):]
+        price_text = text.strip()
+
+        # Fiyatı geçici olarak sakla
+        pending_prices[voucher] = price_text
+        tg_pending.pop(str(chat_id), None)
+
+        # Admin'e onay butonu gönder
+        kb = {'inline_keyboard': [[
+            {'text': '✅ EVET, GÖNDER', 'callback_data': f'pricesend_{voucher}'},
+            {'text': '⏭️ GEÇ (fiyatsız gönder)', 'callback_data': f'priceskip_{voucher}'}
+        ]]}
+        tg_send(chat_id,
+                f"💰 <b>Fiyat:</b> {price_text}\n\n"
+                f"Taşımacıya bu fiyatla göndereyim mi?\n"
+                f"(Cevap vermezseniz 15 dk sonra otomatik gönderilir)",
+                markup=kb)
+        return
 
     # ── Commands ──────────────────────────────────────────────────────
     if text.startswith('/start'):
@@ -513,18 +554,18 @@ def _handle_message(msg):
         data = sheets_check(voucher)
         if data.get('found'):
             d = data.get('data', {})
-            job_emoji = '🛬' if str(d.get('JOB','')).upper() == 'ARRIVAL' else '🛫'
+            job_emoji = '🛬' if str(d.get('JOB', '')).upper() == 'ARRIVAL' else '🛫'
             tg_send(chat_id,
                     f"✅ <b>Rezervasyon Bulundu</b>\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"🎫 <code>{voucher}</code>\n"
-                    f"{job_emoji} {d.get('JOB','')} | {d.get('FROM','')} → {d.get('TO','')}\n"
-                    f"📅 {d.get('DATE','')}\n"
-                    f"✈️ {d.get('FLIGHT COD','')} {d.get('FLIGHT TIME','')}\n"
-                    f"🕐 Pickup: {d.get('PICKUP TIME','')}\n"
-                    f"🏨 {d.get('HOTEL/ADRESS','')}\n"
-                    f"👤 {d.get('PASSANGER NAME','')} | {d.get('PASSANGER PHONE','')}\n"
-                    f"📋 Durum: <b>{d.get('RESERVATION STATUS','')}</b>")
+                    f"{job_emoji} {d.get('JOB', '')} | {d.get('FROM', '')} → {d.get('TO', '')}\n"
+                    f"📅 {d.get('DATE', '')}\n"
+                    f"✈️ {d.get('FLIGHT COD', '')} {d.get('FLIGHT TIME', '')}\n"
+                    f"🕐 Pickup: {d.get('PICKUP TIME', '')}\n"
+                    f"🏨 {d.get('HOTEL/ADRESS', '')}\n"
+                    f"👤 {d.get('PASSANGER NAME', '')} | {d.get('PASSANGER PHONE', '')}\n"
+                    f"📋 Durum: <b>{d.get('RESERVATION STATUS', '')}</b>")
         else:
             tg_send(chat_id, f"❌ <code>{voucher}</code> numaralı rezervasyon bulunamadı.")
         return
@@ -542,9 +583,9 @@ def _handle_message(msg):
         tg_send(ADMIN_CHAT_ID,
                 f"❌ <b>İPTAL TALEBİ</b>\n"
                 f"🎫 Voucher: <code>{voucher}</code>\n"
-                f"👤 Talep eden: @{username} ({chat_id})",
+                f"👤 Talep eden: {username} ({chat_id})",
                 markup=kb)
-        tg_send(chat_id, f"✅ <code>{voucher}</code> için iptal talebiniz admin'e gönderildi. Onay bekleniyor.")
+        tg_send(chat_id, f"✅ <code>{voucher}</code> için iptal talebiniz admin'e gönderildi.")
         return
 
     if text.startswith('/driver'):
@@ -575,7 +616,6 @@ def _handle_message(msg):
         reply = resp.choices[0].message.content
         session.append({'role': 'assistant', 'content': reply})
 
-        # Fallback to admin
         if 'FALLBACK_TO_ADMIN' in reply:
             clean_reply = reply.replace('FALLBACK_TO_ADMIN', '').strip()
             tg_send(chat_id, clean_reply)
@@ -585,9 +625,8 @@ def _handle_message(msg):
                     f"<i>{text}</i>")
             return
 
-        # Auto-save when confirmed
         if 'REZERVASYON_ONAYLANDI' in reply:
-            fields = extract_fields_from_history(full_msgs)
+            fields  = extract_fields_from_history(full_msgs)
             voucher = generate_voucher()
             job     = fields.get('job', 'ARRIVAL').upper()
             saat    = fields.get('saat', '')
@@ -619,7 +658,7 @@ def _handle_message(msg):
             }
             sheets_reserve(sheets_payload)
             notify_admin(fields, voucher, source='📱 TELEGRAM')
-            tg_sessions.pop(str(chat_id), None)  # clear session
+            tg_sessions.pop(str(chat_id), None)
             tg_send(chat_id,
                     f"✅ <b>Rezervasyon Kaydedildi!</b>\n\n"
                     f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n\n"
@@ -668,7 +707,7 @@ def _handle_callback(cq):
                     f"🚌 <b>{voucher}</b> için şoför atayın:",
                     markup={'inline_keyboard': buttons})
 
-    # ── ADMIN: Şoför seç ─────────────────────────────────────────────
+    # ── ADMIN: Şoför seç → fiyat sor, timer başlat ───────────────────
     elif cbd.startswith('drv_'):
         parts   = cbd.split('_', 2)
         drv_id  = parts[1] if len(parts) > 1 else ''
@@ -688,31 +727,92 @@ def _handle_callback(cq):
 
         # Sheets güncelle
         sheets_update({
-            'voucher':          voucher,
-            'TRANSFER_STATUS':  'WAITING_DRIVER',
-            'SUPPLIER_NAME':    supplier,
-            'DRIVER_NAME':      drv_name,
-            'DRIVER_PHONE':     drv_phone,
+            'voucher':         voucher,
+            'TRANSFER_STATUS': 'WAITING_DRIVER',
+            'SUPPLIER_NAME':   supplier,
+            'DRIVER_NAME':     drv_name,
+            'DRIVER_PHONE':    drv_phone,
         })
 
-        # Admin mesajı güncelle
+        # Şoför bilgilerini ve rezervasyon datasını sakla (henüz bildirim yok)
+        res_data = sheets_check(voucher).get('data', {})
+        pending_driver_sends[voucher] = {
+            'drv_tgid': drv_tgid,
+            'drv_name': drv_name,
+            'res_data': res_data,
+            'timer':    None
+        }
+
+        # 15 dk timer başlat
+        _start_price_timer(voucher)
+
+        # Admin'e şoför atandı mesajı + fiyat iste
         tg_edit(chat_id, msg_id,
-                f"✅ <b>ŞOFÖR ATANDI — Onay bekleniyor</b>\n"
-                f"🎫 <code>{voucher}</code>\n"
+                f"✅ <b>ŞOFÖR ATANDI</b> — <code>{voucher}</code>\n"
                 f"🚗 <b>{drv_name}</b> ({supplier})\n"
-                f"📞 {drv_phone}")
+                f"📞 {drv_phone}\n\n"
+                f"⏳ Şoföre gönderilmeden önce tedarikçi fiyatını girin.")
 
-        # Şoföre bildir (tam detay + kabul/red)
-        if drv_tgid and drv_tgid != 'nan':
-            res_data = sheets_check(voucher).get('data', {})
-            notify_driver(drv_tgid, drv_name, voucher, res_data)
-
-    # ── ADMIN: Fiyat gir ─────────────────────────────────────────────
-    elif cbd.startswith('price_'):
-        voucher = cbd[len('price_'):]
+        # Fiyat bekleme durumuna al
         tg_pending[str(chat_id)] = f'awaiting_price_{voucher}'
+        tg_send(chat_id,
+                f"💰 <b>{voucher}</b> için tedarikçi fiyatını girin\n"
+                f"Örnek: <code>45 EUR</code> veya <code>50</code>\n\n"
+                f"⏰ 15 dakika içinde girilmezse şoföre <b>fiyatsız</b> gönderilir.")
+
+    # ── ADMIN: Fiyatla gönder ─────────────────────────────────────────
+    elif cbd.startswith('pricesend_'):
+        voucher    = cbd[len('pricesend_'):]
+        price_text = pending_prices.pop(voucher, '')
+
+        # Timer iptal
+        _cancel_timer(voucher)
+        info = pending_driver_sends.pop(voucher, None)
+
+        if info:
+            drv_tgid = info['drv_tgid']
+            drv_name = info['drv_name']
+            res_data = info['res_data']
+
+            # Fiyatı Sheets'e kaydet
+            if price_text:
+                parts = price_text.split()
+                price_val = parts[0]
+                currency  = parts[1].upper() if len(parts) > 1 else 'EUR'
+                sheets_update({
+                    'voucher':          voucher,
+                    'SUPPLIER_PRICE':   price_val,
+                    'SUPPLIER_CURRENCY': currency
+                })
+
+            # Şoföre bildir
+            if drv_tgid and drv_tgid != 'nan':
+                notify_driver(drv_tgid, drv_name, voucher, res_data, price_text=price_text)
+
         tg_edit(chat_id, msg_id,
-                f"💰 <b>{voucher}</b> için tedarikçi fiyatı\n\nLütfen fiyatı yazın (ör: 45):")
+                f"✅ <b>Şoföre gönderildi</b> — <code>{voucher}</code>\n"
+                f"💰 Fiyat: {price_text or '—'}\n"
+                f"📋 Durum: WAITING_DRIVER")
+
+    # ── ADMIN: Fiyatsız gönder ────────────────────────────────────────
+    elif cbd.startswith('priceskip_'):
+        voucher = cbd[len('priceskip_'):]
+        pending_prices.pop(voucher, None)
+        tg_pending.pop(str(chat_id), None)
+
+        _cancel_timer(voucher)
+        info = pending_driver_sends.pop(voucher, None)
+
+        if info:
+            drv_tgid = info['drv_tgid']
+            drv_name = info['drv_name']
+            res_data = info['res_data']
+            if drv_tgid and drv_tgid != 'nan':
+                notify_driver(drv_tgid, drv_name, voucher, res_data, price_text='')
+
+        tg_edit(chat_id, msg_id,
+                f"✅ <b>Şoföre fiyatsız gönderildi</b> — <code>{voucher}</code>\n"
+                f"📋 Durum: WAITING_DRIVER")
 
     # ── ADMIN: Red et ─────────────────────────────────────────────────
     elif cbd.startswith('reject_'):
