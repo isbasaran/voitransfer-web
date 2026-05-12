@@ -125,7 +125,7 @@ body{background:linear-gradient(135deg,#0f0c29 0%,#1a1060 40%,#24243e 100%);disp
       <!-- Chat -->
       <div class="divider" style="display:flex;flex-direction:column;flex:1;min-width:0;">
         <div id="chatMessages" class="chat-area">
-          <div class="bubble-bot">👋 Merhaba! Transfer rezervasyonu için önce transfer tipini söyleyin:&#10;&#10;🛬 <b>ARRIVAL</b> → Havalimanından otele&#10;🛫 <b>DEPARTURE</b> → Otelden havalimanına</div>
+          <div class="bubble-bot">👋 Merhaba! Transfer rezervasyonu için önce transfer tipini söyleyin:&#10;&#10;🛬 <b>ARRIVAL</b> → Havalimanından Otel/Adrese (yolcu iniyor)&#10;🛫 <b>DEPARTURE</b> → Otel/Adresten Havalimanına (yolcu kalkıyor)</div>
         </div>
         <div style="padding:8px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-shrink:0;">
           <input id="userInput" class="chat-input" style="flex:1;" placeholder="Mesajınızı yazın..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"/>
@@ -229,6 +229,7 @@ let editRes = {};
 let editField = '';
 let lastVC = '';
 let busy = false;
+let returnTemplate = null;
 
 // ─── Tabs ─────────────────────────────────────────────────────────
 function switchTab(id) {
@@ -386,6 +387,27 @@ async function saveReservation() {
       addMsg(`✅ Rezervasyon başarıyla kaydedildi!\n🎫 Voucher: ${data.voucher}\n\n📱 Admin'e Telegram bildirimi gönderildi.\n📄 PDF almak için → "PDF İndir" butonu`, 'success', 'chatMessages');
       document.getElementById('pdfBtn').style.display = 'block';
       if (btn) btn.style.display = 'none';
+
+      // Return transfer suggestion
+      if (data.return_template) {
+        returnTemplate = data.return_template;
+        const rt = returnTemplate;
+        const retJob   = rt.job || (res.job === 'ARRIVAL' ? 'DEPARTURE' : 'ARRIVAL');
+        const retEmoji = retJob === 'DEPARTURE' ? '🛫' : '🛬';
+        const retDesc  = retJob === 'DEPARTURE' ? 'Otel → Havalimanı' : 'Havalimanı → Otel';
+
+        const retDiv = document.createElement('div');
+        retDiv.style.cssText = 'background:linear-gradient(135deg,rgba(139,92,246,.14),rgba(59,130,246,.1));border:1px solid rgba(139,92,246,.28);border-radius:10px;padding:10px 12px;margin-top:4px;';
+        retDiv.innerHTML = `
+          <div style="color:rgba(255,255,255,.55);font-size:.7rem;margin-bottom:6px;">🔄 Dönüş transferi oluşturmak ister misiniz?</div>
+          <div style="color:#c4b5fd;font-size:.78rem;font-weight:600;margin-bottom:8px;">${retEmoji} ${retJob} — ${retDesc}<br><span style="color:rgba(255,255,255,.45);font-weight:400;">${rt.from} → ${rt.to} | ${rt.yolcu||''}</span></div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="startReturnTransfer()" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:.75rem;font-weight:600;cursor:pointer;">🔄 Evet, Dönüş Oluştur</button>
+            <button onclick="this.closest('div[style]').remove()" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:7px 12px;font-size:.75rem;cursor:pointer;">✕ Hayır</button>
+          </div>`;
+        document.getElementById('chatMessages').appendChild(retDiv);
+        document.getElementById('chatMessages').scrollTop = 99999;
+      }
     } else {
       addMsg('❌ Kayıt hatası: '+(data.error||'Bilinmeyen'), 'bot', 'chatMessages');
       if (btn) {btn.disabled=false; btn.textContent='✅ Onayla ve Kaydet';}
@@ -406,14 +428,71 @@ async function confirmReservation() {
 
 function cancelNewReservation() {
   if (!confirm('Formu sıfırlamak istiyor musun?')) return;
-  history=[]; res={}; lastVC='';
+  history=[]; res={}; lastVC=''; returnTemplate=null;
   document.getElementById('userInput').value='';
-  document.getElementById('chatMessages').innerHTML='<div class="bubble-bot">👋 Yeni rezervasyon için önce transfer tipini söyleyin: 🛬 ARRIVAL mi 🛫 DEPARTURE mi?</div>';
+  document.getElementById('chatMessages').innerHTML='<div class="bubble-bot">👋 Merhaba! Transfer rezervasyonu için önce transfer tipini söyleyin:\n\n🛬 <b>ARRIVAL</b> → Havalimanından Otel/Adrese (yolcu iniyor)\n🛫 <b>DEPARTURE</b> → Otel/Adresten Havalimanına (yolcu kalkıyor)</div>';
   document.getElementById('summaryContainer').innerHTML='<p style="color:rgba(255,255,255,.18);font-size:.72rem;text-align:center;margin-top:24px;line-height:1.6;">Konuşma başladıkça<br>bilgiler burada görünür</p>';
   document.getElementById('actionButtons').style.display='none';
   document.getElementById('pdfBtn').style.display='none';
   const b=document.getElementById('confirmBtn');
   if(b){b.style.display='block';b.disabled=false;b.textContent='✅ Onayla ve Kaydet';}
+}
+
+// ─── RETURN TRANSFER ──────────────────────────────────────────────
+function startReturnTransfer() {
+  const rt = returnTemplate;
+  if (!rt) return;
+
+  // Reset state with return template pre-filled
+  history = []; res = { ...rt }; lastVC = ''; returnTemplate = null;
+
+  const retJob   = rt.job || 'ARRIVAL';
+  const retEmoji = retJob === 'DEPARTURE' ? '🛫' : '🛬';
+  const retDesc  = retJob === 'DEPARTURE' ? 'Otel/Adres → Havalimanı' : 'Havalimanı → Otel/Adres';
+  const pickupNote = retJob === 'DEPARTURE'
+    ? '\n• Otelden alınış saati (bilmiyorsanız boş bırakabilirsiniz)'
+    : '';
+
+  // Clear UI
+  document.getElementById('chatMessages').innerHTML = '';
+  document.getElementById('summaryContainer').innerHTML = '<p style="color:rgba(255,255,255,.18);font-size:.72rem;text-align:center;margin-top:24px;line-height:1.6;">Konuşma başladıkça<br>bilgiler burada görünür</p>';
+  document.getElementById('pdfBtn').style.display = 'none';
+  const btn = document.getElementById('confirmBtn');
+  if (btn) { btn.style.display = 'block'; btn.disabled = false; btn.textContent = '✅ Onayla ve Kaydet'; }
+  document.getElementById('actionButtons').style.display = 'none';
+
+  // Greet with pre-filled info
+  addMsg(
+    `🔄 Dönüş Transferi Başlatıldı\n\n` +
+    `${retEmoji} ${retJob} — ${retDesc}\n` +
+    `📍 ${rt.from} → ${rt.to}\n` +
+    `👤 ${rt.yolcu || ''} | ${rt.telefon || ''}\n` +
+    `👥 ${rt.yetiskin || 1}Y / ${rt.cocuk || 0}Ç / ${rt.bebek || 0}B\n` +
+    `💰 ${rt.fiyat || ''} ${rt.doviz || 'EUR'}\n\n` +
+    `Yolcu bilgileri otomatik aktarıldı. Şimdi bana:\n` +
+    `• Dönüş tarihi (GG.AA.YYYY)\n` +
+    `• Uçuş no ve saati${pickupNote}`,
+    'bot', 'chatMessages'
+  );
+
+  // Pre-fill history so AI knows context
+  const preCtx = `Dönüş transferi oluşturuyorum. Transfer tipi: ${retJob}. ` +
+    `Güzergah: ${rt.from} → ${rt.to}. ` +
+    `Otel/adres: ${rt.hotel || ''}. ` +
+    `Yolcu: ${rt.yolcu || ''}, telefon: ${rt.telefon || ''}. ` +
+    `${rt.yetiskin || 1} yetişkin, ${rt.cocuk || 0} çocuk, ${rt.bebek || 0} bebek. ` +
+    `Satış fiyatı: ${rt.fiyat || ''} ${rt.doviz || 'EUR'}. ` +
+    `Tarih ve uçuş bilgisini söyleyeceğim.`;
+
+  history.push({ role: 'user', content: preCtx });
+  history.push({
+    role: 'assistant',
+    content: `${retEmoji} ${retJob} dönüş transferi için yolcu bilgileri aktarıldı. ` +
+      `Tarih, uçuş numarası ve saatini bekliyorum.` +
+      (retJob === 'DEPARTURE' ? ' Alınış saatini de belirtirseniz kaydederim.' : '')
+  });
+
+  renderSummary();
 }
 
 // ─── PDF ──────────────────────────────────────────────────────────
