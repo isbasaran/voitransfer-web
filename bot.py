@@ -1,6 +1,6 @@
 import os
 import requests
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from openai import OpenAI
 
@@ -22,6 +22,25 @@ Kullanıcıdan şu bilgileri sırayla topla:
 7. Fiyat ve döviz
 
 Her seferde 1-2 soru sor, kısa ve net ol. Tüm bilgiler toplandığında özet göster."""
+
+
+MOCKUP_PORT = 23636
+
+@app.route('/__mockup/', defaults={'path': ''})
+@app.route('/__mockup/<path:path>')
+def proxy_mockup(path):
+    target = f'http://localhost:{MOCKUP_PORT}/__mockup/{path}'
+    qs = request.query_string.decode()
+    if qs:
+        target += '?' + qs
+    try:
+        resp = requests.get(target, timeout=10, stream=True,
+                            headers={k: v for k, v in request.headers if k.lower() != 'host'})
+        excluded = {'transfer-encoding', 'content-encoding', 'content-length'}
+        headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded]
+        return Response(resp.content, status=resp.status_code, headers=headers)
+    except Exception as e:
+        return str(e), 502
 
 
 @app.route('/')
