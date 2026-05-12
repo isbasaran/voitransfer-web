@@ -9,29 +9,39 @@ from openai import OpenAI
 app = Flask(__name__)
 CORS(app)
 
-SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec'
-TELEGRAM_TOKEN = '8654282740:AAGSXtoXAMtbTmfJiWJI1C_VpM1Oq-4XvGI'
+SCRIPT_URL    = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec'
+TELEGRAM_TOKEN= '8654282740:AAGSXtoXAMtbTmfJiWJI1C_VpM1Oq-4XvGI'
 ADMIN_CHAT_ID = '5833736265'
-TG = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
+TG            = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
 
 client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+
+# ── In-memory Telegram conversation state ────────────────────────────
+# {chat_id: [{'role':..,'content':..}, ...]}
+tg_sessions = {}
+# {chat_id: 'awaiting_price_VOUCHER' | 'awaiting_driver_note_VOUCHER'}
+tg_pending  = {}
 
 # ── System prompt ────────────────────────────────────────────────────
 SYSTEM_PROMPT = """Sen BRIX TRAVEL / Voitrip şirketinin profesyonel transfer rezervasyon asistanısın. Türkçe konuşuyorsun.
 
 Kullanıcıdan sırayla şu bilgileri topla (her seferinde 1-2 soru sor, kısa ve net ol):
 1. Transfer tipi: ARRIVAL mi DEPARTURE mi?
-2. Nereden → Nereye (havalimanı kodu veya adres kısa olsun)
+2. Nereden → Nereye (havalimanı kodu veya adres kısa olsun, ör: AYT, BJV, GNY → BELEK, KEMER, SIDE)
 3. Tarih (GG.AA.YYYY)
 4. Uçuş numarası ve uçuş saati (SS:DD)
-5. Otel/adres adı
-6. Yolcu adı (tam ad) ve telefon numarası
+5. Otel/adres adı (tam isim)
+6. Yolcu adı (tam ad) ve telefon numarası (+90 formatı)
 7. Yetişkin / çocuk / bebek sayısı
 8. Satış fiyatı ve döviz (EUR/USD/TRY)
 
-PICKUP TIME:
+PICKUP TIME hesaplama:
 - ARRIVAL → Pickup = Uçuş saati (aynı)
 - DEPARTURE → Pickup = Uçuş saati - 3.5 saat
+
+Eğer kullanıcı belirsiz bir şey sorarsa veya rezervasyonla ilgisi yoksa, bilgi uydurmadan şunu söyle:
+"Bu konuda emin değilim, sizi operatörümüze bağlıyorum. Lütfen bekleyin."
+Ardından mesajın sonuna şunu ekle: FALLBACK_TO_ADMIN
 
 Tüm bilgiler tamamlandığında şu formatta ÖZET göster:
 ✅ Rezervasyon özeti:
@@ -50,113 +60,126 @@ Kullanıcı onayladığında (evet/onayla/tamam/ok) sadece şunu yaz: REZERVASYO
 Düzeltme isterse düzelt ve özeti tekrar göster.
 Asla bilgi uydurma. Kullanıcının yazdığı değerleri aynen kullan."""
 
-# ── Tool definition for structured field extraction ──────────────────
+# ── Tool definition for structured field extraction ───────────────────
 EXTRACT_TOOL = [{
     "type": "function",
     "function": {
         "name": "update_fields",
-        "description": "Kullanıcının konuşmasından doğrulanan rezervasyon alanlarını güncelle. Sadece kullanıcının açıkça belirttiği değerleri doldur, AI prompt metnini asla yazma.",
+        "description": "Kullanıcının konuşmasından doğrulanan rezervasyon alanlarını güncelle.",
         "parameters": {
             "type": "object",
             "properties": {
-                "job":      {"type": "string", "description": "ARRIVAL veya DEPARTURE"},
-                "from":     {"type": "string", "description": "Kalkış noktası (kısa, ör: AYT, Antalya Havalimanı)"},
-                "to":       {"type": "string", "description": "Varış noktası (kısa, ör: BELEK, Sueno Hotel)"},
-                "tarih":    {"type": "string", "description": "Tarih GG.AA.YYYY formatında"},
-                "ucus":     {"type": "string", "description": "Uçuş numarası"},
-                "saat":     {"type": "string", "description": "Uçuş saati SS:DD"},
-                "pickup":   {"type": "string", "description": "Pickup saati SS:DD"},
-                "hotel":    {"type": "string", "description": "Otel veya adres adı"},
-                "yolcu":    {"type": "string", "description": "Yolcu tam adı"},
-                "telefon":  {"type": "string", "description": "Telefon numarası"},
-                "yetiskin": {"type": "string", "description": "Yetişkin sayısı (rakam)"},
-                "cocuk":    {"type": "string", "description": "Çocuk sayısı (rakam)"},
-                "bebek":    {"type": "string", "description": "Bebek sayısı (rakam)"},
-                "fiyat":    {"type": "string", "description": "Satış fiyatı (rakam)"},
-                "doviz":    {"type": "string", "description": "Döviz: EUR, USD veya TRY"},
-                "not":      {"type": "string", "description": "Varsa özel not"}
+                "job":      {"type": "string"},
+                "from":     {"type": "string"},
+                "to":       {"type": "string"},
+                "tarih":    {"type": "string"},
+                "ucus":     {"type": "string"},
+                "saat":     {"type": "string"},
+                "pickup":   {"type": "string"},
+                "hotel":    {"type": "string"},
+                "yolcu":    {"type": "string"},
+                "telefon":  {"type": "string"},
+                "yetiskin": {"type": "string"},
+                "cocuk":    {"type": "string"},
+                "bebek":    {"type": "string"},
+                "fiyat":    {"type": "string"},
+                "doviz":    {"type": "string"},
+                "not":      {"type": "string"}
             },
             "required": []
         }
     }
 }]
 
-# ── Helpers ──────────────────────────────────────────────────────────
-def tg_send(chat_id, text, markup=None):
+# ── Telegram helpers ──────────────────────────────────────────────────
+def tg_send(chat_id, text, markup=None, reply_markup=None):
     payload = {'chat_id': str(chat_id), 'text': text, 'parse_mode': 'HTML'}
-    if markup:
-        payload['reply_markup'] = json.dumps(markup)
+    m = markup or reply_markup
+    if m:
+        payload['reply_markup'] = json.dumps(m)
     try:
         requests.post(f'{TG}/sendMessage', json=payload, timeout=10)
     except Exception:
         pass
 
-def tg_answer(callback_id, text=''):
+def tg_answer(callback_id, text='', alert=False):
     try:
         requests.post(f'{TG}/answerCallbackQuery',
-                      json={'callback_query_id': callback_id, 'text': text},
+                      json={'callback_query_id': callback_id, 'text': text, 'show_alert': alert},
                       timeout=5)
     except Exception:
         pass
 
-def tg_edit(chat_id, message_id, text):
+def tg_edit(chat_id, message_id, text, markup=None):
+    payload = {'chat_id': str(chat_id), 'message_id': message_id,
+               'text': text, 'parse_mode': 'HTML'}
+    if markup:
+        payload['reply_markup'] = json.dumps(markup)
     try:
-        requests.post(f'{TG}/editMessageText',
-                      json={'chat_id': str(chat_id), 'message_id': message_id,
-                            'text': text, 'parse_mode': 'HTML'},
-                      timeout=5)
+        requests.post(f'{TG}/editMessageText', json=payload, timeout=5)
     except Exception:
         pass
 
+def tg_force_reply(chat_id, text):
+    tg_send(chat_id, text, markup={'force_reply': True, 'selective': True})
+
+# ── Google Sheets helpers ─────────────────────────────────────────────
 def get_drivers():
-    """DRIVERS sheet'ten aktif şoför listesini çek."""
     try:
-        resp = requests.get(SCRIPT_URL,
-                            params={'action': 'get_drivers'},
-                            timeout=15)
+        resp = requests.get(SCRIPT_URL, params={'action': 'get_drivers'}, timeout=15)
         result = resp.json()
-        if isinstance(result, list):
-            return result
-        return result.get('drivers', [])
+        return result if isinstance(result, list) else result.get('drivers', [])
     except Exception:
         return []
 
-def notify_admin(data, voucher):
-    job_emoji = '🛬' if data.get('job','').upper() == 'ARRIVAL' else '🛫'
-    msg = (
-        f"🆕 <b>YENİ REZERVASYON</b>\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n"
-        f"{job_emoji} <b>Transfer:</b> {data.get('job','')}\n"
-        f"📍 <b>Güzergah:</b> {data.get('from','')} → {data.get('to','')}\n"
-        f"📅 <b>Tarih:</b> {data.get('tarih','')}\n"
-        f"✈️ <b>Uçuş:</b> {data.get('ucus','')} saat {data.get('saat','')}\n"
-        f"🕐 <b>Pickup:</b> {data.get('pickup','')}\n"
-        f"🏨 <b>Otel:</b> {data.get('hotel','')}\n"
-        f"👤 <b>Yolcu:</b> {data.get('yolcu','')} | {data.get('telefon','')}\n"
-        f"👥 <b>Kişi:</b> {data.get('yetiskin','0')}Y / {data.get('cocuk','0')}Ç / {data.get('bebek','0')}B\n"
-        f"💰 <b>Fiyat:</b> {data.get('fiyat','')} {data.get('doviz','EUR')}\n"
-        f"📝 <b>Not:</b> {data.get('not','-')}\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"🌐 Web arayüzünden girildi"
-    )
-    kb = {'inline_keyboard': [[
-        {'text': '✅ ONAYLA', 'callback_data': f'approve_{voucher}'},
-        {'text': '❌ RED ET', 'callback_data': f'reject_{voucher}'}
-    ]]}
-    tg_send(ADMIN_CHAT_ID, msg, kb)
+def sheets_update(payload):
+    try:
+        requests.post(SCRIPT_URL, json={**payload, 'action': 'update_status'}, timeout=15)
+    except Exception:
+        pass
+
+def sheets_reserve(payload):
+    try:
+        r = requests.post(SCRIPT_URL, json={**payload, 'action': 'reserve'}, timeout=20)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+def sheets_check(voucher):
+    try:
+        resp = requests.get(SCRIPT_URL, params={'action': 'check', 'voucher': voucher}, timeout=15)
+        return resp.json()
+    except Exception:
+        return {}
+
+# ── Voucher generator ─────────────────────────────────────────────────
+COUNTER_FILE = '/tmp/voi_counter.json'
 
 def generate_voucher():
     now = datetime.datetime.now()
-    return f"BRX{now.strftime('%d%m%y%H%M')}"
+    date_key = now.strftime('%d%m%y')
+    try:
+        with open(COUNTER_FILE, 'r') as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    seq = data.get(date_key, 0) + 1
+    data[date_key] = seq
+    try:
+        with open(COUNTER_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+    return f"BRX{date_key}{seq:03d}"
 
+# ── Pickup time calculator ────────────────────────────────────────────
 def calc_pickup(saat, job):
     if not saat:
         return ''
     if job.upper() == 'ARRIVAL':
         return saat
     try:
-        h, m = map(int, saat.split(':'))
+        h, m = map(int, saat.replace('.', ':').split(':'))
         total = h * 60 + m - 210
         if total < 0:
             total += 1440
@@ -164,7 +187,83 @@ def calc_pickup(saat, job):
     except Exception:
         return saat
 
-# ── Static files ─────────────────────────────────────────────────────
+# ── Admin reservation notification ───────────────────────────────────
+def notify_admin(data, voucher, source='WEB'):
+    job_emoji = '🛬' if data.get('job', '').upper() == 'ARRIVAL' else '🛫'
+    msg = (
+        f"🆕 <b>YENİ REZERVASYON</b> — {source}\n"
+        f"━━━━━━━━━━━━━━━━\n"
+        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n"
+        f"{job_emoji} <b>Transfer:</b> {data.get('job', '')}\n"
+        f"📍 <b>Güzergah:</b> {data.get('from', '')} → {data.get('to', '')}\n"
+        f"📅 <b>Tarih:</b> {data.get('tarih', '')}\n"
+        f"✈️ <b>Uçuş:</b> {data.get('ucus', '')} saat {data.get('saat', '')}\n"
+        f"🕐 <b>Pickup:</b> {data.get('pickup', '')}\n"
+        f"🏨 <b>Otel:</b> {data.get('hotel', '')}\n"
+        f"👤 <b>Yolcu:</b> {data.get('yolcu', '')} | {data.get('telefon', '')}\n"
+        f"👥 <b>Kişi:</b> {data.get('yetiskin', '1')}Y / {data.get('cocuk', '0')}Ç / {data.get('bebek', '0')}B\n"
+        f"💰 <b>Fiyat:</b> {data.get('fiyat', '')} {data.get('doviz', 'EUR')}\n"
+        f"📝 <b>Not:</b> {data.get('not', '-') or '-'}\n"
+        f"━━━━━━━━━━━━━━━━"
+    )
+    kb = {'inline_keyboard': [
+        [
+            {'text': '✅ ONAYLA', 'callback_data': f'approve_{voucher}'},
+            {'text': '❌ RED ET', 'callback_data': f'reject_{voucher}'}
+        ],
+        [
+            {'text': '💰 FİYAT GİR', 'callback_data': f'price_{voucher}'}
+        ]
+    ]}
+    tg_send(ADMIN_CHAT_ID, msg, markup=kb)
+
+# ── Driver notification ───────────────────────────────────────────────
+def notify_driver(drv_tgid, drv_name, voucher, res_data):
+    job_emoji = '🛬' if res_data.get('JOB', '').upper() == 'ARRIVAL' else '🛫'
+    msg = (
+        f"🚌 <b>YENİ TRANSFER GÖREVİ</b>\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n"
+        f"{job_emoji} <b>Transfer:</b> {res_data.get('JOB', '')}\n"
+        f"📍 <b>Güzergah:</b> {res_data.get('FROM', '')} → {res_data.get('TO', '')}\n"
+        f"📅 <b>Tarih:</b> {res_data.get('DATE', '')}\n"
+        f"✈️ <b>Uçuş:</b> {res_data.get('FLIGHT_COD', '')} saat {res_data.get('FLIGHT_TIME', '')}\n"
+        f"🕐 <b>Pickup:</b> {res_data.get('PICKUP_TIME', '')}\n"
+        f"🏨 <b>Otel/Adres:</b> {res_data.get('HOTEL_ADRESS', '')}\n"
+        f"👤 <b>Yolcu:</b> {res_data.get('PASSANGER_NAME', '')}\n"
+        f"📞 <b>Yolcu Tel:</b> {res_data.get('PASSANGER_PHONE', '')}\n"
+        f"👥 <b>Kişi:</b> {res_data.get('ADULT', '1')}Y / {res_data.get('CHILD', '0')}Ç / {res_data.get('INF', '0')}B\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"👷 <b>Şoför:</b> {drv_name}"
+    )
+    kb = {'inline_keyboard': [[
+        {'text': '✅ KABUL ET', 'callback_data': f'drv_accept_{voucher}'},
+        {'text': '❌ RED ET',   'callback_data': f'drv_reject_{voucher}'}
+    ]]}
+    tg_send(drv_tgid, msg, markup=kb)
+
+# ── AI chat fields extractor ──────────────────────────────────────────
+def extract_fields_from_history(messages):
+    try:
+        resp = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=messages + [{
+                'role': 'user',
+                'content': 'Şimdiye kadar kullanıcının kesin olarak belirttiği rezervasyon bilgilerini update_fields fonksiyonuyla kaydet. Sadece kullanıcının söylediği gerçek değerleri yaz.'
+            }],
+            tools=EXTRACT_TOOL,
+            tool_choice={'type': 'function', 'function': {'name': 'update_fields'}},
+            max_tokens=300
+        )
+        tc = resp.choices[0].message.tool_calls
+        if tc:
+            fields = json.loads(tc[0].function.arguments)
+            return {k: v for k, v in fields.items() if v and str(v).strip()}
+    except Exception:
+        pass
+    return {}
+
+# ── Static routes ─────────────────────────────────────────────────────
 MOCKUP_PORT = 23636
 
 @app.route('/__mockup/', defaults={'path': ''})
@@ -178,7 +277,7 @@ def proxy_mockup(path):
         resp = requests.get(target, timeout=10, stream=True,
                             headers={k: v for k, v in request.headers if k.lower() != 'host'})
         excluded = {'transfer-encoding', 'content-encoding', 'content-length'}
-        headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded]
+        headers  = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded]
         return Response(resp.content, status=resp.status_code, headers=headers)
     except Exception as e:
         return str(e), 502
@@ -195,10 +294,10 @@ def logo():
 def logo_nobg():
     return send_from_directory('.', 'logo-nobg.png')
 
-# ── AI Chat — with tool calling for field extraction ─────────────────
+# ── Web: AI Chat ──────────────────────────────────────────────────────
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    data = request.get_json(force=True)
+    data     = request.get_json(force=True)
     messages = data.get('messages', [])
     if not messages:
         return jsonify({'error': 'Mesaj gerekli'}), 400
@@ -206,113 +305,88 @@ def api_chat():
     full_messages = [{'role': 'system', 'content': SYSTEM_PROMPT}] + messages
 
     try:
-        # Step 1: Get conversational reply
         reply_resp = client.chat.completions.create(
             model='gpt-4o-mini',
             messages=full_messages,
             max_tokens=600
         )
-        reply = reply_resp.choices[0].message.content
-
+        reply     = reply_resp.choices[0].message.content
         confirmed = 'REZERVASYON_ONAYLANDI' in reply
+        fallback  = 'FALLBACK_TO_ADMIN' in reply
 
-        # Step 2: Extract structured fields from conversation (parallel tool call)
-        extract_messages = full_messages + [{'role': 'assistant', 'content': reply}]
-        extract_resp = client.chat.completions.create(
-            model='gpt-4o-mini',
-            messages=extract_messages + [{
-                'role': 'user',
-                'content': 'Şimdiye kadar kullanıcının kesin olarak belirttiği rezervasyon bilgilerini update_fields fonksiyonuyla kaydet. Sadece kullanıcının söylediği gerçek değerleri yaz, soru metni veya açıklama yazma.'
-            }],
-            tools=EXTRACT_TOOL,
-            tool_choice={'type': 'function', 'function': {'name': 'update_fields'}},
-            max_tokens=300
+        # If fallback, notify admin
+        if fallback:
+            last_user = next((m['content'] for m in reversed(messages)
+                              if m['role'] == 'user'), '')
+            tg_send(ADMIN_CHAT_ID,
+                    f"❓ <b>MÜŞTERİ SORUSU (Web)</b>\n\n<i>{last_user}</i>\n\n"
+                    f"Müşteri cevap bekliyor. Lütfen web arayüzünden manuel olarak yanıtlayın.")
+
+        # Extract structured fields
+        fields = extract_fields_from_history(
+            full_messages + [{'role': 'assistant', 'content': reply}]
         )
-
-        fields = {}
-        tool_calls = extract_resp.choices[0].message.tool_calls
-        if tool_calls:
-            try:
-                fields = json.loads(tool_calls[0].function.arguments)
-                # Remove empty strings
-                fields = {k: v for k, v in fields.items() if v and str(v).strip()}
-            except Exception:
-                fields = {}
-
         return jsonify({'reply': reply, 'confirmed': confirmed, 'fields': fields})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-# ── Reserve — save to Google Sheets + notify Telegram ────────────────
+# ── Web: Reserve ──────────────────────────────────────────────────────
 @app.route('/api/reserve', methods=['POST'])
 def api_reserve():
-    data = request.get_json(force=True)
-
+    data    = request.get_json(force=True)
     voucher = data.get('voucher') or generate_voucher()
     data['voucher'] = voucher
 
-    job = data.get('job', 'ARRIVAL').upper()
-    saat = data.get('saat', '')
+    job    = data.get('job', 'ARRIVAL').upper()
+    saat   = data.get('saat', '')
     pickup = data.get('pickup', '') or calc_pickup(saat, job)
-    now_str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+    now_str= datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
 
-    # Map exactly to Google Sheets column order:
-    # VOUCHER | DATE | OPERATOR | JOB | FROM | TO | HOTEL/ADRESS |
-    # FLIGHT COD | FLIGHT TIME | PICKUP TIME | PASSANGER NAME | PASSANGER PHONE |
-    # ADULT | CHILD | INF | SALE PRICE | SALE CURE | NOTE 1 |
-    # RESERVATION STATUS | RESERVATION STAFF | RESERVATION DATE
     sheets_payload = {
-        'action': 'reserve',
-        'VOUCHER':             voucher,
-        'DATE':                data.get('tarih', ''),
-        'OPERATOR':            data.get('operator', 'BRIX TRAVEL'),
-        'JOB':                 job,
-        'FROM':                data.get('from', ''),
-        'TO':                  data.get('to', ''),
-        'HOTEL_ADRESS':        data.get('hotel', ''),
-        'FLIGHT_COD':          data.get('ucus', ''),
-        'FLIGHT_TIME':         saat,
-        'PICKUP_TIME':         pickup,
-        'PASSANGER_NAME':      data.get('yolcu', ''),
-        'PASSANGER_PHONE':     data.get('telefon', ''),
-        'ADULT':               data.get('yetiskin', '1'),
-        'CHILD':               data.get('cocuk', '0'),
-        'INF':                 data.get('bebek', '0'),
-        'SALE_PRICE':          data.get('fiyat', ''),
-        'SALE_CURE':           data.get('doviz', 'EUR'),
-        'NOTE_1':              data.get('not', ''),
-        'RESERVATION_STATUS':  'NEW',
-        'RESERVATION_STAFF':   'WEB',
-        'RESERVATION_DATE':    now_str,
+        'VOUCHER':          voucher,
+        'DATE':             data.get('tarih', ''),
+        'OPERATOR':         'BRIX TRAVEL',
+        'JOB':              job,
+        'FROM':             data.get('from', ''),
+        'TO':               data.get('to', ''),
+        'HOTEL_ADRESS':     data.get('hotel', ''),
+        'FLIGHT_COD':       data.get('ucus', ''),
+        'FLIGHT_TIME':      saat,
+        'PICKUP_TIME':      pickup,
+        'PASSANGER_NAME':   data.get('yolcu', ''),
+        'PASSANGER_PHONE':  data.get('telefon', ''),
+        'ADULT':            data.get('yetiskin', '1'),
+        'CHILD':            data.get('cocuk', '0'),
+        'INF':              data.get('bebek', '0'),
+        'SALE_PRICE':       data.get('fiyat', ''),
+        'SALE_CURE':        data.get('doviz', 'EUR'),
+        'NOTE_1':           data.get('not', ''),
+        'RESERVATION_STATUS': 'NEW',
+        'RESERVATION_STAFF':  'WEB',
+        'RESERVATION_DATE':   now_str,
     }
+    ok = sheets_reserve(sheets_payload)
+    if not ok:
+        # Don't block user even if sheets has a hiccup
+        pass
 
-    try:
-        requests.post(SCRIPT_URL, json=sheets_payload, timeout=20)
-    except Exception as e:
-        return jsonify({'error': f'Sheets hatası: {str(e)}'}), 500
-
-    # Telegram admin notification
-    notify_admin(data, voucher)
-
+    notify_admin(data, voucher, source='🌐 WEB')
     return jsonify({'status': 'ok', 'voucher': voucher}), 200
 
 
-# ── Check ─────────────────────────────────────────────────────────────
+# ── Web: Check ────────────────────────────────────────────────────────
 @app.route('/api/check', methods=['GET'])
 def api_check():
     voucher = request.args.get('voucher', '').upper().strip()
     if not voucher:
         return jsonify({'error': 'Voucher gerekli'}), 400
-    try:
-        resp = requests.get(SCRIPT_URL, params={'action': 'check', 'voucher': voucher}, timeout=15)
-        return jsonify(resp.json())
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result = sheets_check(voucher)
+    return jsonify(result)
 
 
-# ── Edit ──────────────────────────────────────────────────────────────
+# ── Web: Edit ─────────────────────────────────────────────────────────
 @app.route('/api/edit', methods=['POST'])
 def api_edit():
     data = request.get_json(force=True)
@@ -325,176 +399,354 @@ def api_edit():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Cancel ────────────────────────────────────────────────────────────
+# ── Web: Cancel ───────────────────────────────────────────────────────
 @app.route('/api/cancel', methods=['POST'])
 def api_cancel():
     data = request.get_json(force=True)
     if not data or not data.get('voucher'):
         return jsonify({'error': 'Voucher gerekli'}), 400
     voucher = data.get('voucher', '').upper()
-    msg = (f"❌ <b>İPTAL TALEBİ</b>\n"
-           f"🎫 Voucher: <code>{voucher}</code>\n"
-           f"🌐 Web arayüzünden gönderildi")
     kb = {'inline_keyboard': [[
         {'text': '✅ İptali Onayla', 'callback_data': f'cancel_ok_{voucher}'},
-        {'text': '❌ Reddet', 'callback_data': f'cancel_no_{voucher}'}
+        {'text': '❌ Reddet',        'callback_data': f'cancel_no_{voucher}'}
     ]]}
-    tg_send(ADMIN_CHAT_ID, msg, kb)
+    tg_send(ADMIN_CHAT_ID,
+            f"❌ <b>İPTAL TALEBİ</b>\n🎫 Voucher: <code>{voucher}</code>\n🌐 Web arayüzünden",
+            markup=kb)
     try:
-        requests.post(SCRIPT_URL, json={**data, 'action': 'cancel', 'voucher': voucher}, timeout=15)
+        requests.post(SCRIPT_URL,
+                      json={**data, 'action': 'cancel', 'voucher': voucher},
+                      timeout=15)
         return jsonify({'status': 'ok'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-# ── Telegram Webhook — handle callback_query ──────────────────────────
+# ── Telegram Webhook ──────────────────────────────────────────────────
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     update = request.get_json(force=True, silent=True) or {}
 
-    # Handle callback queries (inline keyboard button presses)
+    # ── Callback query (button presses) ──────────────────────────────
     cq = update.get('callback_query')
     if cq:
-        cq_id   = cq.get('id')
-        chat_id = cq.get('message', {}).get('chat', {}).get('id')
-        msg_id  = cq.get('message', {}).get('message_id')
-        cbd     = cq.get('data', '')
+        _handle_callback(cq)
+        return jsonify({'ok': True})
 
-        tg_answer(cq_id)  # remove loading spinner
-
-        if cbd.startswith('approve_'):
-            # ── Rezervasyonu onayla → DRIVERS listesini getir ──────────
-            voucher = cbd[len('approve_'):]
-            try:
-                requests.post(SCRIPT_URL, json={
-                    'action': 'update_status',
-                    'voucher': voucher,
-                    'RESERVATION_STATUS': 'APPROVED',
-                    'TRANSFER_STATUS': 'WAITING_CAR'
-                }, timeout=15)
-            except Exception:
-                pass
-
-            drivers = get_drivers()
-            if not drivers:
-                tg_edit(chat_id, msg_id,
-                        f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n"
-                        f"⚠️ DRIVERS sayfasında aktif şoför bulunamadı. "
-                        f"Lütfen Sheets'te manuel atama yapın.")
-            else:
-                # Şoför butonu: callback_data max 64 byte → DRV_ID kısa tutuyoruz
-                buttons = []
-                for d in drivers:
-                    drv_id   = str(d.get('DRIVER_ID', ''))
-                    drv_name = d.get('DRIVER_NAME', 'İsimsiz')
-                    supplier = d.get('SUPPLIER_NAME', '')
-                    label    = f"🚗 {drv_name} ({supplier})"
-                    # Format: drv_DRIVERID_VOUCHER  (voucher max 13 char → safe)
-                    cb       = f"drv_{drv_id}_{voucher}"
-                    buttons.append([{'text': label, 'callback_data': cb}])
-
-                tg_edit(chat_id, msg_id,
-                        f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n"
-                        f"👇 Şoför seçin:")
-                tg_send(chat_id,
-                        f"🚌 <b>{voucher}</b> için şoför atayın:",
-                        markup={'inline_keyboard': buttons})
-
-        elif cbd.startswith('drv_'):
-            # ── Şoför seçildi → Sheets güncelle + şoföre bildir ────────
-            parts   = cbd.split('_', 2)   # ['drv', DRIVER_ID, VOUCHER]
-            drv_id  = parts[1] if len(parts) > 1 else ''
-            voucher = parts[2] if len(parts) > 2 else ''
-
-            # Şoför bilgilerini DRIVERS listesinden bul
-            drivers = get_drivers()
-            driver  = next((d for d in drivers
-                            if str(d.get('DRIVER_ID','')) == drv_id), None)
-
-            if not driver:
-                tg_edit(chat_id, msg_id, f"❌ Şoför bulunamadı (ID: {drv_id})")
-            else:
-                drv_name  = driver.get('DRIVER_NAME', '')
-                drv_phone = driver.get('DRIVER_PHONE', '')
-                supplier  = driver.get('SUPPLIER_NAME', '')
-                drv_tgid  = driver.get('TELEGRAM_ID', '')
-
-                # Google Sheets güncelle
-                try:
-                    requests.post(SCRIPT_URL, json={
-                        'action':            'update_status',
-                        'voucher':           voucher,
-                        'TRANSFER_STATUS':   'ASSIGNED',
-                        'SUPPLIER_NAME':     supplier,
-                        'DRIVER_NAME':       drv_name,
-                        'DRIVER_PHONE':      drv_phone,
-                    }, timeout=15)
-                except Exception:
-                    pass
-
-                # Admin mesajını güncelle
-                tg_edit(chat_id, msg_id,
-                        f"✅ <b>ŞOFÖR ATANDI</b>\n"
-                        f"🎫 Voucher: <code>{voucher}</code>\n"
-                        f"🚗 Şoför: <b>{drv_name}</b>\n"
-                        f"📞 Telefon: {drv_phone}\n"
-                        f"🏢 Firma: {supplier}")
-
-                # Şoföre Telegram bildirimi (TELEGRAM_ID varsa)
-                if drv_tgid:
-                    drv_msg = (
-                        f"🚌 <b>YENİ TRANSFER GÖREVİ</b>\n"
-                        f"━━━━━━━━━━━━━━━\n"
-                        f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n"
-                        f"👤 <b>Şoför:</b> {drv_name}\n\n"
-                        f"Lütfen rezervasyon detayları için yöneticinizle iletişime geçin."
-                    )
-                    tg_send(drv_tgid, drv_msg)
-
-        elif cbd.startswith('reject_'):
-            voucher = cbd[len('reject_'):]
-            try:
-                requests.post(SCRIPT_URL, json={
-                    'action': 'update_status',
-                    'voucher': voucher,
-                    'RESERVATION_STATUS': 'REJECTED'
-                }, timeout=15)
-            except Exception:
-                pass
-            tg_edit(chat_id, msg_id,
-                    f"❌ <b>REDDEDİLDİ</b>\n🎫 Voucher: <code>{voucher}</code>")
-
-        elif cbd.startswith('cancel_ok_'):
-            voucher = cbd[len('cancel_ok_'):]
-            try:
-                requests.post(SCRIPT_URL, json={
-                    'action': 'update_status',
-                    'voucher': voucher,
-                    'RESERVATION_STATUS': 'CANCELLED'
-                }, timeout=15)
-            except Exception:
-                pass
-            tg_edit(chat_id, msg_id,
-                    f"✅ <b>İPTAL EDİLDİ</b>\n🎫 Voucher: <code>{voucher}</code>")
-
-        elif cbd.startswith('cancel_no_'):
-            voucher = cbd[len('cancel_no_'):]
-            tg_edit(chat_id, msg_id,
-                    f"↩️ <b>İptal reddedildi</b>\n🎫 Voucher: <code>{voucher}</code> aktif kalmaya devam ediyor.")
+    # ── Regular message ───────────────────────────────────────────────
+    msg = update.get('message', {})
+    if msg:
+        _handle_message(msg)
 
     return jsonify({'ok': True})
 
 
-# ── Register Telegram webhook on startup ──────────────────────────────
+def _handle_message(msg):
+    chat_id  = msg.get('chat', {}).get('id')
+    text     = (msg.get('text') or '').strip()
+    username = msg.get('from', {}).get('first_name', 'Misafir')
+
+    if not text or not chat_id:
+        return
+
+    # ── Check if we're waiting for a specific reply (price, note) ────
+    pending = tg_pending.get(str(chat_id))
+    if pending:
+        if pending.startswith('awaiting_price_'):
+            voucher = pending[len('awaiting_price_'):]
+            sheets_update({'voucher': voucher, 'SUPPLIER_PRICE': text, 'SUPPLIER_CURRENCY': 'EUR'})
+            tg_send(chat_id, f"✅ <b>{voucher}</b> için tedarikçi fiyatı <b>{text} EUR</b> olarak kaydedildi.")
+            tg_pending.pop(str(chat_id), None)
+            return
+
+    # ── Commands ──────────────────────────────────────────────────────
+    if text.startswith('/start'):
+        tg_sessions[str(chat_id)] = []
+        tg_pending.pop(str(chat_id), None)
+        tg_send(chat_id,
+                f"👋 Merhaba <b>{username}</b>! Ben Voitrip AI Asistanı.\n\n"
+                f"Transfer rezervasyonu yapmak için transfer tipini söyleyin:\n\n"
+                f"🛬 <b>ARRIVAL</b> → Havalimanından otele\n"
+                f"🛫 <b>DEPARTURE</b> → Otelden havalimanına\n\n"
+                f"Diğer komutlar:\n"
+                f"/check VOUCHER — Rezervasyon sorgula\n"
+                f"/cancel VOUCHER — İptal talebi\n"
+                f"/driver — Şoför kaydı")
+        return
+
+    if text.startswith('/check'):
+        parts = text.split()
+        if len(parts) < 2:
+            tg_send(chat_id, "❓ Kullanım: /check VOUCHER\nÖrnek: /check BRX1305261001")
+            return
+        voucher = parts[1].upper()
+        tg_send(chat_id, f"🔍 <code>{voucher}</code> sorgulanıyor...")
+        data = sheets_check(voucher)
+        if data.get('found'):
+            d = data.get('data', {})
+            job_emoji = '🛬' if str(d.get('JOB','')).upper() == 'ARRIVAL' else '🛫'
+            tg_send(chat_id,
+                    f"✅ <b>Rezervasyon Bulundu</b>\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"🎫 <code>{voucher}</code>\n"
+                    f"{job_emoji} {d.get('JOB','')} | {d.get('FROM','')} → {d.get('TO','')}\n"
+                    f"📅 {d.get('DATE','')}\n"
+                    f"✈️ {d.get('FLIGHT COD','')} {d.get('FLIGHT TIME','')}\n"
+                    f"🕐 Pickup: {d.get('PICKUP TIME','')}\n"
+                    f"🏨 {d.get('HOTEL/ADRESS','')}\n"
+                    f"👤 {d.get('PASSANGER NAME','')} | {d.get('PASSANGER PHONE','')}\n"
+                    f"📋 Durum: <b>{d.get('RESERVATION STATUS','')}</b>")
+        else:
+            tg_send(chat_id, f"❌ <code>{voucher}</code> numaralı rezervasyon bulunamadı.")
+        return
+
+    if text.startswith('/cancel'):
+        parts = text.split()
+        if len(parts) < 2:
+            tg_send(chat_id, "❓ Kullanım: /cancel VOUCHER\nÖrnek: /cancel BRX1305261001")
+            return
+        voucher = parts[1].upper()
+        kb = {'inline_keyboard': [[
+            {'text': '✅ İptali Onayla', 'callback_data': f'cancel_ok_{voucher}'},
+            {'text': '❌ Reddet',        'callback_data': f'cancel_no_{voucher}'}
+        ]]}
+        tg_send(ADMIN_CHAT_ID,
+                f"❌ <b>İPTAL TALEBİ</b>\n"
+                f"🎫 Voucher: <code>{voucher}</code>\n"
+                f"👤 Talep eden: @{username} ({chat_id})",
+                markup=kb)
+        tg_send(chat_id, f"✅ <code>{voucher}</code> için iptal talebiniz admin'e gönderildi. Onay bekleniyor.")
+        return
+
+    if text.startswith('/driver'):
+        tg_send(chat_id,
+                f"🚗 <b>Şoför Kaydı</b>\n\n"
+                f"Sisteme kaydolmak için lütfen yöneticinizle iletişime geçin.\n"
+                f"Telegram ID'niz: <code>{chat_id}</code>\n"
+                f"Bu ID'yi yöneticinize bildirin.")
+        tg_send(ADMIN_CHAT_ID,
+                f"🚗 <b>Şoför Kaydı Talebi</b>\n"
+                f"👤 Ad: {username}\n"
+                f"🆔 Telegram ID: <code>{chat_id}</code>\n\n"
+                f"DRIVERS sayfasına ekleyebilirsiniz.")
+        return
+
+    # ── AI Conversational mode ────────────────────────────────────────
+    session = tg_sessions.setdefault(str(chat_id), [])
+    session.append({'role': 'user', 'content': text})
+
+    full_msgs = [{'role': 'system', 'content': SYSTEM_PROMPT}] + session
+
+    try:
+        resp  = client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=full_msgs,
+            max_tokens=600
+        )
+        reply = resp.choices[0].message.content
+        session.append({'role': 'assistant', 'content': reply})
+
+        # Fallback to admin
+        if 'FALLBACK_TO_ADMIN' in reply:
+            clean_reply = reply.replace('FALLBACK_TO_ADMIN', '').strip()
+            tg_send(chat_id, clean_reply)
+            tg_send(ADMIN_CHAT_ID,
+                    f"❓ <b>MÜŞTERİ SORUSU (Telegram)</b>\n"
+                    f"👤 {username} ({chat_id})\n\n"
+                    f"<i>{text}</i>")
+            return
+
+        # Auto-save when confirmed
+        if 'REZERVASYON_ONAYLANDI' in reply:
+            fields = extract_fields_from_history(full_msgs)
+            voucher = generate_voucher()
+            job     = fields.get('job', 'ARRIVAL').upper()
+            saat    = fields.get('saat', '')
+            pickup  = fields.get('pickup', '') or calc_pickup(saat, job)
+            now_str = datetime.datetime.now().strftime('%d.%m.%Y %H:%M')
+
+            sheets_payload = {
+                'VOUCHER':          voucher,
+                'DATE':             fields.get('tarih', ''),
+                'OPERATOR':         'BRIX TRAVEL',
+                'JOB':              job,
+                'FROM':             fields.get('from', ''),
+                'TO':               fields.get('to', ''),
+                'HOTEL_ADRESS':     fields.get('hotel', ''),
+                'FLIGHT_COD':       fields.get('ucus', ''),
+                'FLIGHT_TIME':      saat,
+                'PICKUP_TIME':      pickup,
+                'PASSANGER_NAME':   fields.get('yolcu', ''),
+                'PASSANGER_PHONE':  fields.get('telefon', ''),
+                'ADULT':            fields.get('yetiskin', '1'),
+                'CHILD':            fields.get('cocuk', '0'),
+                'INF':              fields.get('bebek', '0'),
+                'SALE_PRICE':       fields.get('fiyat', ''),
+                'SALE_CURE':        fields.get('doviz', 'EUR'),
+                'NOTE_1':           fields.get('not', ''),
+                'RESERVATION_STATUS': 'NEW',
+                'RESERVATION_STAFF':  'TG',
+                'RESERVATION_DATE':   now_str,
+            }
+            sheets_reserve(sheets_payload)
+            notify_admin(fields, voucher, source='📱 TELEGRAM')
+            tg_sessions.pop(str(chat_id), None)  # clear session
+            tg_send(chat_id,
+                    f"✅ <b>Rezervasyon Kaydedildi!</b>\n\n"
+                    f"🎫 <b>Voucher:</b> <code>{voucher}</code>\n\n"
+                    f"Admin onayından sonra size bilgi verilecektir.\n"
+                    f"Sorgu için: /check {voucher}")
+            return
+
+        tg_send(chat_id, reply)
+
+    except Exception as e:
+        tg_send(chat_id, f"❌ Bir hata oluştu: {str(e)}\nLütfen tekrar deneyin.")
+
+
+def _handle_callback(cq):
+    cq_id   = cq.get('id')
+    chat_id = cq.get('message', {}).get('chat', {}).get('id')
+    msg_id  = cq.get('message', {}).get('message_id')
+    cbd     = cq.get('data', '')
+    tg_answer(cq_id)
+
+    # ── ADMIN: Rezervasyon onayla ─────────────────────────────────────
+    if cbd.startswith('approve_'):
+        voucher = cbd[len('approve_'):]
+        sheets_update({'voucher': voucher,
+                       'RESERVATION_STATUS': 'APPROVED',
+                       'TRANSFER_STATUS': 'WAITING_CAR'})
+
+        drivers = get_drivers()
+        if not drivers:
+            tg_edit(chat_id, msg_id,
+                    f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n"
+                    f"⚠️ DRIVERS sayfasında aktif şoför bulunamadı.")
+        else:
+            buttons = []
+            for d in drivers:
+                drv_id   = str(d.get('DRIVER_ID', ''))
+                drv_name = d.get('DRIVER_NAME', 'İsimsiz')
+                supplier = d.get('SUPPLIER_NAME', '')
+                buttons.append([{
+                    'text': f"🚗 {drv_name} ({supplier})",
+                    'callback_data': f"drv_{drv_id}_{voucher}"
+                }])
+            tg_edit(chat_id, msg_id,
+                    f"✅ <b>ONAYLANDI</b> — <code>{voucher}</code>\n\n👇 Şoför seçin:")
+            tg_send(chat_id,
+                    f"🚌 <b>{voucher}</b> için şoför atayın:",
+                    markup={'inline_keyboard': buttons})
+
+    # ── ADMIN: Şoför seç ─────────────────────────────────────────────
+    elif cbd.startswith('drv_'):
+        parts   = cbd.split('_', 2)
+        drv_id  = parts[1] if len(parts) > 1 else ''
+        voucher = parts[2] if len(parts) > 2 else ''
+
+        drivers = get_drivers()
+        driver  = next((d for d in drivers
+                        if str(d.get('DRIVER_ID', '')) == drv_id), None)
+        if not driver:
+            tg_edit(chat_id, msg_id, f"❌ Şoför bulunamadı (ID: {drv_id})")
+            return
+
+        drv_name  = driver.get('DRIVER_NAME', '')
+        drv_phone = driver.get('DRIVER_PHONE', '')
+        supplier  = driver.get('SUPPLIER_NAME', '')
+        drv_tgid  = str(driver.get('TELEGRAM_ID', ''))
+
+        # Sheets güncelle
+        sheets_update({
+            'voucher':          voucher,
+            'TRANSFER_STATUS':  'WAITING_DRIVER',
+            'SUPPLIER_NAME':    supplier,
+            'DRIVER_NAME':      drv_name,
+            'DRIVER_PHONE':     drv_phone,
+        })
+
+        # Admin mesajı güncelle
+        tg_edit(chat_id, msg_id,
+                f"✅ <b>ŞOFÖR ATANDI — Onay bekleniyor</b>\n"
+                f"🎫 <code>{voucher}</code>\n"
+                f"🚗 <b>{drv_name}</b> ({supplier})\n"
+                f"📞 {drv_phone}")
+
+        # Şoföre bildir (tam detay + kabul/red)
+        if drv_tgid and drv_tgid != 'nan':
+            res_data = sheets_check(voucher).get('data', {})
+            notify_driver(drv_tgid, drv_name, voucher, res_data)
+
+    # ── ADMIN: Fiyat gir ─────────────────────────────────────────────
+    elif cbd.startswith('price_'):
+        voucher = cbd[len('price_'):]
+        tg_pending[str(chat_id)] = f'awaiting_price_{voucher}'
+        tg_edit(chat_id, msg_id,
+                f"💰 <b>{voucher}</b> için tedarikçi fiyatı\n\nLütfen fiyatı yazın (ör: 45):")
+
+    # ── ADMIN: Red et ─────────────────────────────────────────────────
+    elif cbd.startswith('reject_'):
+        voucher = cbd[len('reject_'):]
+        sheets_update({'voucher': voucher, 'RESERVATION_STATUS': 'REJECTED'})
+        tg_edit(chat_id, msg_id,
+                f"❌ <b>REDDEDİLDİ</b>\n🎫 <code>{voucher}</code>")
+
+    # ── ADMIN: İptal onayla ───────────────────────────────────────────
+    elif cbd.startswith('cancel_ok_'):
+        voucher = cbd[len('cancel_ok_'):]
+        sheets_update({'voucher': voucher, 'RESERVATION_STATUS': 'CANCELLED'})
+        tg_edit(chat_id, msg_id,
+                f"✅ <b>İPTAL EDİLDİ</b>\n🎫 <code>{voucher}</code>")
+
+    # ── ADMIN: İptal reddet ───────────────────────────────────────────
+    elif cbd.startswith('cancel_no_'):
+        voucher = cbd[len('cancel_no_'):]
+        tg_edit(chat_id, msg_id,
+                f"↩️ <b>İptal reddedildi</b>\n🎫 <code>{voucher}</code> aktif.")
+
+    # ── ŞOFÖR: Kabul et ───────────────────────────────────────────────
+    elif cbd.startswith('drv_accept_'):
+        voucher = cbd[len('drv_accept_'):]
+        sheets_update({'voucher': voucher, 'TRANSFER_STATUS': 'DRIVER_CONFIRMED'})
+        tg_edit(chat_id, msg_id,
+                f"✅ <b>GÖREVİ KABUL ETTİNİZ</b>\n"
+                f"🎫 <code>{voucher}</code>\n\n"
+                f"Transferiniz onaylandı. İyi yolculuklar!")
+        tg_send(ADMIN_CHAT_ID,
+                f"✅ <b>ŞOFÖR KABUL ETTİ</b>\n"
+                f"🎫 <code>{voucher}</code>\n"
+                f"📋 Durum: DRIVER_CONFIRMED")
+
+    # ── ŞOFÖR: Reddet ─────────────────────────────────────────────────
+    elif cbd.startswith('drv_reject_'):
+        voucher = cbd[len('drv_reject_'):]
+        sheets_update({'voucher': voucher, 'TRANSFER_STATUS': 'WAITING_CAR'})
+        tg_edit(chat_id, msg_id,
+                f"❌ <b>GÖREVİ REDDETTİNİZ</b>\n"
+                f"🎫 <code>{voucher}</code>")
+        tg_send(ADMIN_CHAT_ID,
+                f"⚠️ <b>ŞOFÖR REDDETTİ</b>\n"
+                f"🎫 <code>{voucher}</code>\n\n"
+                f"Lütfen başka şoför atayın.",
+                markup={'inline_keyboard': [[
+                    {'text': '🔄 Yeniden Şoför Seç', 'callback_data': f'approve_{voucher}'}
+                ]]})
+
+
+# ── Webhook registration ──────────────────────────────────────────────
 def register_webhook():
-    replit_domain = os.environ.get('REPLIT_DEV_DOMAIN', '')
-    if replit_domain:
-        url = f'https://{replit_domain}/telegram'
+    domain = os.environ.get('REPLIT_DEV_DOMAIN', '')
+    if domain:
+        url = f'https://{domain}/telegram'
         try:
-            r = requests.post(f'{TG}/setWebhook', json={'url': url}, timeout=10)
-            print(f'Telegram webhook set: {url} → {r.json()}')
+            r = requests.post(f'{TG}/setWebhook',
+                              json={'url': url,
+                                    'allowed_updates': ['message', 'callback_query']},
+                              timeout=10)
+            print(f'Telegram webhook → {url} : {r.json()}')
         except Exception as e:
-            print(f'Webhook registration failed: {e}')
+            print(f'Webhook failed: {e}')
 
 
 if __name__ == '__main__':

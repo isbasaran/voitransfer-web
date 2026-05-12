@@ -1,0 +1,389 @@
+VOITRANSFER OPERATIONS SYSTEM - COMPLETE PROJECT BRIEF (UPDATED)
+
+=== PROJECT OVERVIEW ===
+VoiTransfer is a transfer reservation system with:
+- Telegram Bot (@VoiTransferBot) with AI Conversational Module
+- Web Interface (Vercel: https://voitransfer-web.vercel.app/)
+- Google Sheets as database
+- Flask backend for webhooks
+- AI-powered conversational interface (ChatGPT)
+- PDF generation & download for reservations
+
+=== CONTACTS & IDs ===
+Telegram Bot Token: 8654282740:AAGSXtoXAMtbTmfJiWJI1C_VpM1Oq-4XvGI
+Admin Telegram ID: 5833736265
+Owner: Murat İsb (Telegram: @isbasaran)
+Company: BRIX TRAVEL / Voitrip
+
+=== PLATFORMS & LINKS ===
+1. REPLIT BOT:
+   - Project: FocusedItchyCompilers
+   - URL: https://replit.com/@isbasaranmurat/FocusedItchyCompilers
+   - Language: Python
+   - Status: Active 24/7 (Always-on)
+   - Features: AI Conversational + Telegram webhooks + Fallback system
+
+2. WEB (VERCEL):
+   - Project: voitransfer-web
+   - URL: https://voitransfer-web.vercel.app/
+   - GitHub: https://github.com/isbasaran/voitransfer-web
+   - Tech: Plain HTML + Tailwind CSS + Axios + ChatGPT API
+   - Status: Deployed
+   - New Features: Split layout (Chat 60% + Cards 40%), PDF generation, Download button
+
+3. GOOGLE SHEETS:
+   - Spreadsheet: VoiTransfer_Bot
+   - ID: 1P1fbmIurbdMZGyGawKTJGE-QlnsALmiQl_6NPIyaLJU
+   - Sheets: Sayfa1 (Reservations), EDIT_LOG, DRIVERS
+   - Apps Script: https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec
+
+4. FLASK WEBHOOK:
+   - URL: https://afbcc8ca-9ffb-4a6d-9946-3b0b178e0d4c-00-3owsc9eqe549u.sisko.replit.dev
+   - Endpoints: /webhook, /webhook/check, /webhook/edit, /webhook/cancel
+   - CORS: Enabled (flask-cors==6.0.2)
+
+5. AI MODULE (ChatGPT):
+   - Provider: OpenAI (gpt-4)
+   - API Key: VITE_OPENAI_API_KEY (stored in Vercel env vars)
+   - Used in: Telegram bot + Web interface
+   - Features: Natural language understanding, step-by-step info collection, auto-validation, fallback to admin
+
+=== GOOGLE SHEETS STRUCTURE ===
+Columns (1-21):
+1. VOUCHER
+2. DATE
+3. OPERATOR
+4. JOB (ARRIVAL/DEPARTURE)
+5. FROM
+6. TO
+7. HOTEL/ADDRESS
+8. FLIGHT CODE
+9. FLIGHT TIME
+10. PICKUP TIME
+11. PASSENGER NAME
+12. PASSENGER PHONE
+13. ADULT
+14. CHILD
+15. INFANT
+16. SALE PRICE
+17. SALE CURRENCY
+18. NOTE 1
+19. RESERVATION STATUS
+20. RESERVATION STAFF
+21. RESERVATION DATE
+
+Extended Columns (22-30):
+22. TRANSFER_STATUS
+23. SUPPLIER_NAME
+24. DRIVER_NAME
+25. DRIVER_PHONE
+26. SUPPLIER_PRICE
+27. SUPPLIER_CURRENCY
+28. NOTES_DRIVER
+29. DRIVER_TELEGRAM_ID
+30. COMPLETED_DATETIME
+
+EDIT_LOG Sheet:
+- VOUCHER | FIELD | OLD_VALUE | NEW_VALUE | EDIT_DATE | EDITED_BY
+
+DRIVERS Sheet:
+- DRIVER_ID | DRIVER_NAME | DRIVER_PHONE | SUPPLIER_NAME | TELEGRAM_ID | STATUS | DATE_REGISTERED
+
+=== TELEGRAM BOT FEATURES ===
+AI CONVERSATIONAL MODULE:
+- Natural language understanding (ChatGPT gpt-4)
+- Step-by-step information collection
+- Auto-validation: phone format, location codes, time format
+- Fallback system: If uncertain, ask admin (no hallucination)
+- Saves to Google Sheets automatically
+- Notifies admin + driver via Telegram
+
+Conversation Flow:
+User: "Transfer istiyorum"
+Bot: "Merhaba! Nereden nereye?"
+User: "AYT'den Belek'e"
+Bot: "AYT'den BELEK'e, doğru mu?"
+User: "Evet"
+Bot: "Hangi tarih?"
+... (continues until complete)
+Bot: "ÖZET + Onaylıyor musun?"
+User: "Evet"
+Result: ✅ Kaydedildi! BRX130526001
+
+Fallback Logic:
+IF uncertain THEN ask admin:
+❓ MÜŞTERİ SORUSU
+User: Can I bring my own car?
+Bot: Ağzımı açmayacağım 😅
+Admin gets: [💬 CEVAP VER]
+Admin replies → Bot sends to User
+
+Commands:
+- /start → AI Conversational Mode
+- /check VOUCHER → Status inquiry
+- /edit VOUCHER → Edit request
+- /cancel VOUCHER → Cancel request
+- /driver → Register as driver
+
+Admin Notifications:
+- Full reservation details
+- Buttons: [✅ ONAYLA] [💰 FİYAT GİR] [❌ RED ET]
+- Edit requests with old/new values
+- Cancel requests with confirmation
+- Fallback questions with [💬 CEVAP VER]
+
+Driver Notifications:
+- Assignment details
+- Status updates
+- Buttons: [✅ KABUL ET] [❌ RED ET]
+- Always in Turkish
+
+Voucher System:
+- Format: OPERATOR_CODE + DDMMYY + SEQUENCE
+- Example: BRX130526001
+- Auto-generated if empty
+- Case-insensitive lookup
+
+=== WEB INTERFACE ===
+Tech Stack:
+- HTML5 + Tailwind CSS (cdn.tailwindcss.com)
+- Axios for HTTP requests
+- ChatGPT API for AI (OpenAI)
+- PDFKit or similar for PDF generation
+- Plain JavaScript (no frameworks)
+
+DESIGN (UPDATED):
+Split Layout:
+- Left 60%: Chat window (full height)
+- Right 40%: Summary cards (scrollable)
+- Chat bubbles: Bot left (blue), User right (purple)
+- Summary cards: Grid layout with edit icons
+- Responsive: Mobile stacks vertically
+
+Tabs:
+1. NEW - AI Conversational reservation creation
+2. CHECK - Voucher lookup + status display
+3. EDIT - Load + inline edit + save
+4. CANCEL - Voucher lookup + confirmation
+
+NEW Tab Flow:
+User types → Bot (ChatGPT) analyzes → Asks next question
+Summary cards update in real-time
+Auto-extract: phone, locations, time, passenger count
+Modal editing: Click edit icon → inline edit → Save
+Confirmation screen with all details
+[✅ ONAYLA] button → Save + PDF generation
+[🔄 ROUND TRIP] → Dönüş section appears with auto-fill
+[❌ İPTAL] → Reset form
+
+PDF GENERATION (NEW):
+When user clicks [✅ ONAYLA]:
+1. Generate PDF with:
+   - Voucher number (large, prominent)
+   - All reservation details
+   - Company logo (BRIX TRAVEL)
+   - QR code (voucher)
+   - Professional formatting
+   - Turkish language
+2. Display download button: [📥 PDF'yi İndir]
+3. Also: Auto-save to Sheets + notify admin
+
+PDF Template:
+┌────────────────────────────┐
+│   BRIX TRAVEL / VoiTrip    │
+│   Transfer Confirmation    │
+├────────────────────────────┤
+│ Voucher: BRX130526001      │
+│ Status: ✅ CONFIRMED       │
+│                            │
+│ PASSENGER INFO:            │
+│ Name: Murat                │
+│ Phone: +905434112355       │
+│ Email: (if available)      │
+│                            │
+│ TRANSFER DETAILS:          │
+│ Date: 13.05.2026           │
+│ From: Antalya (AYT)        │
+│ To: Belek                  │
+│ Hotel: SUENO DELUXE        │
+│ Time: 14:30                │
+│ Pickup: 14:30              │
+│ Passengers: 2 adult, 1 kid │
+│                            │
+│ PRICE:                     │
+│ 35 EUR                     │
+│                            │
+│ Notes: ___________         │
+│                            │
+│ [QR CODE]                  │
+│ Scan for details           │
+│                            │
+│ Thank you for booking!     │
+└────────────────────────────┘
+
+API Integration:
+- OpenAI ChatGPT: gpt-4
+- Flask Webhook: /webhook, /check, /edit, /cancel
+- Google Apps Script: Save to Sheets
+- Telegram Bot: Admin/Driver notifications
+- PDF Generation: Client-side or server-side
+
+=== AI CONVERSATIONAL MODULE (ChatGPT) ===
+Used in: Telegram Bot + Web Interface
+
+System Prompt:
+"Sen bir transfer rezervasyon asistanısın. Kullanıcıdan gerekli bilgileri topla:
+- Nereden (From): Airport codes (AYT, GNY, BJV)
+- Nereye (To): Cities (BELEK, KEMER, SIDE, KAS)
+- Tarih (Date): Parse "yarın", "bugün", or specific date
+- Saat (Time): Flight time (format: HH:MM)
+- Otel (Hotel): Full hotel name
+- Yolcu (Passenger): Name (2-30 chars)
+- Telefon (Phone): +90 format or 05XX
+- Sayı (Count): Adult, child, infant (numbers)
+- Uçuş (Flight): Flight code (optional)
+- Fiyat (Price): Number + currency
+- Not (Notes): Any special requests
+
+Each turn ask 1-2 questions. When all info gathered, show summary and ask confirmation.
+IF uncertain → ask admin (don't guess)."
+
+Data Extraction:
+- Phone: Regex /(\+?90|0)(\d{9,10})/
+- Time: Regex /(\d{1,2}):(\d{2})/
+- Numbers: Parse for passenger count
+- Locations: Known list (AYT, BELEK, etc.)
+- Dates: Parse "yarın" = tomorrow, "bugün" = today
+
+Validation:
+- Phone: Must be Turkish (+90) or valid format
+- Location: Must be in known list or ask clarification
+- Time: Must be HH:MM format
+- Date: Parse and confirm (e.g., "13.05.2026?")
+- Name: 2-30 characters, basic Latin/Turkish
+
+Error Handling:
+- If user input ambiguous: "Anlamadım, lütfen tekrar söyle"
+- If data invalid: "Telefon formatı yanlış. +90 ile başla"
+- If confidence <80%: "Emin değilim. İnsan operatöre soralım mı?"
+
+=== PICKUP TIME LOGIC ===
+ARRIVAL: Pickup Time = Flight Time (same)
+DEPARTURE: Pickup Time = Flight Time - 3.5 hours
+Manual override: If user inputs pickup time, use that
+Auto-calculate: If empty, calculate based on job type
+
+Example:
+ARRIVAL Flight 14:30 → Pickup 14:30
+DEPARTURE Flight 18:00 → Pickup 14:30
+
+=== ROUND TRIP FEATURE ===
+When selected:
+- Gidiş (Outbound): ARRIVAL job
+- Dönüş (Return): DEPARTURE job (auto-reversed)
+- From/To fields reversed
+- Hotel, date, operator, price, currency, notes, passenger count copied
+- Pickup time: auto-calculated or user input
+- Flight code & time: user input required
+
+Creates 2 vouchers (sequential):
+BRX130526001 (ARRIVAL)
+BRX130526002 (DEPARTURE)
+
+Both saved, both notify admin/driver, appear as pair in Sheets
+
+=== TRANSFER STATUS FLOW ===
+WAITING_CAR → WAITING_DRIVER → DRIVER_CONFIRMED → IN_PROGRESS → COMPLETED
+Alternative paths: CANCELLED, DRIVER_NO_RESPONSE
+
+Status updates triggered by:
+- Admin [✅ ONAYLA] → WAITING_DRIVER
+- Driver [✅ KABUL ET] → DRIVER_CONFIRMED
+- Driver starts → IN_PROGRESS
+- Driver completes → COMPLETED
+
+=== CURRENT IMPLEMENTATION ===
+Telegram Bot:
+✅ /start with AI Conversational
+✅ AI auto-validates input
+✅ Fallback to admin system
+✅ Google Sheets integration
+✅ Admin/Driver notifications
+✅ CORS enabled for Flask
+✅ 24/7 active (Replit Always-on)
+
+Web Interface:
+✅ Split layout (Chat 60% + Cards 40%)
+✅ AI Conversational (ChatGPT)
+✅ Real-time card updates
+✅ Inline editing with modal
+✅ PDF generation + download button
+✅ CHECK/EDIT/CANCEL tabs
+✅ Round Trip support
+✅ Responsive design
+
+Backend:
+✅ Flask webhook with CORS
+✅ Google Sheets CRUD
+✅ Google Apps Script sync
+✅ Telegram bot integration
+✅ ChatGPT API integration
+
+=== RECENT CHANGES ===
+1. Web design: Split layout (Chat + Summary Cards)
+2. PDF generation: Confirmation + download
+3. AI module: ChatGPT integrated (both platforms)
+4. Fallback system: Admin escalation for uncertain questions
+5. CORS: Fixed (flask-cors enabled)
+
+=== OUTSTANDING TASKS ===
+1. ⏳ PDF styling: Company logo, QR code, professional layout
+2. ⏳ Web design: Improve UI/UX (separate tabs, better typography)
+3. ⏳ Excel bulk import for reservations
+4. ⏳ WhatsApp integration (Twilio)
+5. ⏳ Persistent user memory (store past bookings)
+6. ⏳ Multi-language support (TR/EN/AR)
+7. ⏳ Email confirmation (send PDF via email)
+
+=== TESTING CREDENTIALS ===
+Test Voucher: BRX130526001
+Test Phone: +905434112355 (Murat)
+Test Hotel: SUENO DELUXE
+Test Route: AYT → BELEK
+Test Date: Yarın (tomorrow)
+Test Passengers: 2 yetişkin, 1 çocuk
+
+=== IMPORTANT NOTES ===
+- Always in Turkish for user-facing messages
+- Admin notifications in Turkish
+- Driver notifications in Turkish
+- Fallback system: Ask admin when uncertain (don't hallucinate)
+- ChatGPT provides natural language understanding
+- CORS enabled: Web ↔ Bot communication works
+- Telegram bot always active (Replit Always-on)
+- Google Sheets is single source of truth
+- Flask webhook handles all backend logic
+- PDF generation on-demand after confirmation
+- Web and Telegram share same AI logic
+
+=== COMPLETE FLOW ===
+Telegram: User → Bot (AI/ChatGPT) → Validation → Sheets → Admin → Driver → Status
+Web: User → Chat (AI/ChatGPT) → Cards → PDF → Sheets → Bot → Admin → Driver
+
+Both platforms:
+- Same AI validation
+- Same Sheets integration
+- Same notification system
+- Same status tracking
+- PDF only on Web (currently)
+
+=== NEXT STEPS FOR AGENT ===
+When working on this project:
+1. Ask about specific task (new feature, bug, optimization)
+2. Use this brief for context
+3. Maintain consistency across platforms
+4. Test on: Web + Bot + Sheets simultaneously
+5. Remember: AI handles natural language, fallback system handles edge cases
+6. PDF generation: Use library (PDFKit, jsPDF, or similar)
+7. Always validate before saving to Sheets
+8. Notify both admin and driver on updates
