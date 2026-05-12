@@ -110,14 +110,14 @@ export function GlassAI() {
       {/* Header */}
       <header className="w-full max-w-5xl z-10 mb-8 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <Plane className="text-white" size={24} />
-          </div>
+          <img
+            src="/__mockup/images/voitrip-logo.png"
+            alt="Voitrip Logo"
+            className="h-12 w-auto drop-shadow-lg"
+            style={{ filter: 'drop-shadow(0 0 8px rgba(139,92,246,0.4))' }}
+          />
           <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-              VoiTransfer <span className="font-light text-violet-300">AI</span>
-            </h1>
-            <p className="text-xs text-white/50 font-medium tracking-wider uppercase">Akıllı Asistan</p>
+            <p className="text-xs text-white/50 font-medium tracking-wider uppercase mt-1">Akıllı Transfer Asistanı</p>
           </div>
         </div>
         <div className="hidden md:flex items-center gap-2">
