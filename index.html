@@ -1,224 +1,652 @@
-Value').value.trim();
-            if (!newValue) return;
-            reservationData[currentEditField] = newValue;
-            editReservationData[currentEditField] = newValue;
-            updateSummaryCards();
-            closeEditModal();
-            if (document.getElementById('editSummary').innerHTML) refreshEditSummary();
-        }
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voitrip — Transfer Rezervasyon</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #0f0c29 0%, #1a1060 40%, #24243e 100%);
+    min-height: 100vh;
+  }
 
-        function closeEditModal() {
-            document.getElementById('editModal').classList.remove('active');
-        }
+  /* Glass panels */
+  .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.12); }
+  .glass-dark { background: rgba(0,0,0,0.3); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
 
-        async function confirmReservation() {
-            if (!reservationData.yolcu && !reservationData.telefon) {
-                alert('❌ En az yolcu adı veya telefon numarası gerekli!');
-                return;
-            }
+  /* Tabs */
+  .tab-btn { transition: all 0.2s; color: rgba(255,255,255,0.5); }
+  .tab-btn.active { background: linear-gradient(135deg, rgba(139,92,246,0.5), rgba(59,130,246,0.4)); color: #fff; border-color: rgba(139,92,246,0.5); }
+  .tab-btn:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: flex; flex-direction: column; flex: 1; }
 
-            const data = {
-                voucher: '',
-                tarih: reservationData.tarih || '',
-                operator: 'BRIX TRAVEL',
-                job: reservationData.job || 'ARRIVAL',
-                from: reservationData.from || '',
-                to: reservationData.to || '',
-                hotel: reservationData.hotel || '',
-                ucus: reservationData.ucus || '',
-                saat: reservationData.saat || '',
-                pickup: reservationData.saat || '',
-                yolcu: reservationData.yolcu || '',
-                telefon: reservationData.telefon || '',
-                yetiskin: reservationData.yetiskin || '0',
-                cocuk: reservationData.cocuk || '0',
-                bebek: reservationData.bebek || '0',
-                fiyat: reservationData.fiyat || '',
-                'döviz': reservationData.döviz || 'EUR',
-                not: reservationData.not || ''
-            };
+  /* Chat */
+  .chat-area { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  .chat-area::-webkit-scrollbar { width: 4px; }
+  .chat-area::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 4px; }
+  .bubble-bot { background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.25); border-radius: 0 1rem 1rem 1rem; padding: 0.75rem 1rem; color: rgba(255,255,255,0.9); font-size: 0.875rem; max-width: 85%; align-self: flex-start; line-height: 1.5; }
+  .bubble-user { background: linear-gradient(135deg, rgba(139,92,246,0.4), rgba(59,130,246,0.35)); border: 1px solid rgba(139,92,246,0.3); border-radius: 1rem 0 1rem 1rem; padding: 0.75rem 1rem; color: #fff; font-size: 0.875rem; max-width: 85%; align-self: flex-end; line-height: 1.5; }
 
-            try {
-                const resp = await fetch('/api/reserve', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                if (resp.ok) {
-                    addChatMessage('✅ Rezervasyon başarıyla kaydedildi!', 'bot', 'chatMessages');
-                    resetNewForm();
-                } else {
-                    addChatMessage('❌ Hata oluştu. Tekrar deneyin.', 'bot', 'chatMessages');
-                }
-            } catch (error) {
-                addChatMessage('❌ Bağlantı hatası: ' + error.message, 'bot', 'chatMessages');
-            }
-        }
+  /* Input */
+  .chat-input { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 0.75rem; color: #fff; font-size: 0.875rem; outline: none; transition: border-color 0.2s; }
+  .chat-input::placeholder { color: rgba(255,255,255,0.35); }
+  .chat-input:focus { border-color: rgba(139,92,246,0.6); background: rgba(255,255,255,0.09); }
 
-        function resetNewForm() {
-            conversationHistory = [];
-            reservationData = {};
-            document.getElementById('userInput').value = '';
-            document.getElementById('chatMessages').innerHTML = '<div class="chat-bubble-bot">👋 Yeni rezervasyon için nereden nereye gitmek istersin?</div>';
-            document.getElementById('summaryContainer').innerHTML = '';
-            document.getElementById('actionButtons').classList.add('hidden');
-        }
+  /* Buttons */
+  .btn-primary { background: linear-gradient(135deg, #7c3aed, #3b82f6); color: #fff; font-weight: 600; border-radius: 0.75rem; padding: 0.625rem 1.25rem; font-size: 0.875rem; border: none; cursor: pointer; transition: opacity 0.2s, transform 0.1s; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.12); border-radius: 0.75rem; padding: 0.625rem 1.25rem; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
+  .btn-ghost:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .btn-danger { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); border-radius: 0.75rem; padding: 0.625rem 1.25rem; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
+  .btn-danger:hover { background: rgba(239,68,68,0.3); }
+  .btn-pdf { background: linear-gradient(135deg, rgba(16,185,129,0.4), rgba(59,130,246,0.35)); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; border-radius: 0.75rem; padding: 0.625rem 1.25rem; font-size: 0.875rem; cursor: pointer; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem; }
+  .btn-pdf:hover { background: linear-gradient(135deg, rgba(16,185,129,0.55), rgba(59,130,246,0.5)); }
 
-        function cancelNewReservation() {
-            if (confirm('Formu sıfırlamak istediğinden emin misin?')) resetNewForm();
-        }
+  /* Summary cards */
+  .field-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.75rem; padding: 0.75rem 1rem; transition: border-color 0.2s; }
+  .field-card:hover { border-color: rgba(139,92,246,0.4); }
+  .edit-icon { cursor: pointer; opacity: 0.5; font-size: 0.75rem; transition: opacity 0.2s; }
+  .edit-icon:hover { opacity: 1; }
 
-        function toggleRoundTrip() {
-            alert('🔄 Round trip özelliği yakında eklenecek!');
-        }
+  /* Voucher card (boarding pass style) */
+  .voucher-card { background: linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(30,27,75,0.6) 50%, rgba(59,130,246,0.15) 100%); border: 1px solid rgba(139,92,246,0.3); border-radius: 1.25rem; }
+  .route-line { border-left: 2px dashed rgba(139,92,246,0.35); }
 
-        async function checkReservation() {
-            const voucher = document.getElementById('checkVoucher').value.trim().toUpperCase();
-            if (!voucher) return;
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 50; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
 
-            addChatMessage('🔍 ' + voucher + ' kontrol ediliyor...', 'bot', 'chatMessagesCheck');
+  /* Voucher input (check/edit/cancel tabs) */
+  .voucher-input-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .voucher-input { flex: 1; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 0.75rem; color: #fff; font-size: 0.875rem; padding: 0.625rem 1rem; outline: none; letter-spacing: 0.05em; font-weight: 600; }
+  .voucher-input::placeholder { color: rgba(255,255,255,0.3); font-weight: 400; letter-spacing: 0; }
+  .voucher-input:focus { border-color: rgba(139,92,246,0.6); }
 
-            try {
-                const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
-                const data = await resp.json();
+  /* Pulse dot */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .pulse { animation: pulse 2s infinite; }
+</style>
+</head>
+<body class="p-3 md:p-6">
 
-                if (data && data.voucher) {
-                    addChatMessage('✅ Rezervasyon bulundu!', 'bot', 'chatMessagesCheck');
-                    displayCheckResult(data);
-                } else if (data.error) {
-                    addChatMessage('❌ Hata: ' + data.error, 'bot', 'chatMessagesCheck');
-                } else {
-                    addChatMessage('❌ Voucher bulunamadı: ' + voucher, 'bot', 'chatMessagesCheck');
-                }
-            } catch (error) {
-                addChatMessage('❌ Bağlantı hatası: ' + error.message, 'bot', 'chatMessagesCheck');
-            }
-        }
+<!-- Header -->
+<header class="max-w-6xl mx-auto mb-5 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <img src="/logo.png" alt="Voitrip" class="h-10 w-auto" onerror="this.style.display='none';document.getElementById('fallback-logo').style.display='flex'" />
+    <div id="fallback-logo" class="hidden items-center gap-2">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-violet-500/30">V</div>
+      <span class="text-white font-bold text-xl tracking-tight">Voitrip <span class="text-violet-300 font-light text-base">AI</span></span>
+    </div>
+    <span class="text-white/40 text-sm hidden md:block">Akıllı Transfer Asistanı</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <div class="w-2 h-2 rounded-full bg-emerald-400 pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]"></div>
+    <span class="text-xs text-white/50 font-medium">Sistem Aktif</span>
+  </div>
+</header>
 
-        function displayCheckResult(data) {
-            const container = document.getElementById('checkSummary');
-            const fields = ['yolcu', 'telefon', 'tarih', 'saat', 'job', 'from', 'to', 'hotel', 'ucus', 'yetiskin', 'cocuk', 'bebek', 'fiyat', 'döviz', 'not', 'supplier_name', 'driver_name', 'driver_phone', 'supplier_price', 'status'];
+<!-- Main card -->
+<div class="max-w-6xl mx-auto glass rounded-2xl overflow-hidden" style="min-height: 78vh;">
 
-            container.innerHTML = `
-                <div class="card mb-2">
-                    <h3 class="font-bold text-purple-700">🎫 VOUCHER: ${data.voucher}</h3>
-                </div>
-                <div class="summary-grid">
-                    ${fields.filter(k => data[k]).map(key => `
-                        <div class="card">
-                            <p class="text-xs text-gray-500 font-medium">${fieldLabels[key] || key}</p>
-                            <p class="text-sm font-semibold text-gray-800">${data[key] || '-'}</p>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
+  <!-- Tab Bar -->
+  <div class="flex gap-1.5 p-3 border-b border-white/10 bg-black/20">
+    <button onclick="switchTab('new')" id="tab-new" class="tab-btn active flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border border-transparent flex items-center justify-center gap-1.5">
+      <span>✈️</span> YENİ REZERVASYON
+    </button>
+    <button onclick="switchTab('check')" id="tab-check" class="tab-btn flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border border-transparent flex items-center justify-center gap-1.5">
+      <span>🔍</span> SORGULA
+    </button>
+    <button onclick="switchTab('edit')" id="tab-edit" class="tab-btn flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border border-transparent flex items-center justify-center gap-1.5">
+      <span>✏️</span> DÜZENLE
+    </button>
+    <button onclick="switchTab('cancel')" id="tab-cancel" class="tab-btn flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold border border-transparent flex items-center justify-center gap-1.5">
+      <span>❌</span> İPTAL
+    </button>
+  </div>
 
-        async function loadForEdit() {
-            const voucher = document.getElementById('editVoucher').value.trim().toUpperCase();
-            if (!voucher) return;
+  <!-- Content area -->
+  <div class="flex" style="height: calc(78vh - 60px);">
 
-            addChatMessage('⏳ ' + voucher + ' yükleniyor...', 'bot', 'chatMessagesEdit');
+    <!-- ═══════════ NEW RESERVATION TAB ═══════════ -->
+    <div id="panel-new" class="tab-panel active w-full">
+      <div class="flex flex-1 overflow-hidden">
 
-            try {
-                const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
-                const data = await resp.json();
+        <!-- Chat column -->
+        <div class="flex flex-col flex-1 border-r border-white/10">
+          <div id="chatMessages" class="chat-area">
+            <div class="bubble-bot">👋 Merhaba! Yeni bir transfer rezervasyonu yapmak için nereden nereye gitmek istediğinizi söyleyin.</div>
+          </div>
+          <div class="p-3 border-t border-white/10 flex gap-2">
+            <input id="userInput" type="text" class="chat-input flex-1 px-4 py-3" placeholder="Mesajınızı yazın..." onkeydown="if(event.key==='Enter') sendMessage()" />
+            <button onclick="sendMessage()" class="btn-primary px-4">➤</button>
+          </div>
+        </div>
 
-                if (data && data.voucher) {
-                    editReservationData = { ...data };
-                    addChatMessage('✅ Yüklendi! Sağdaki kartlarda düzenleyebilirsin.', 'bot', 'chatMessagesEdit');
-                    refreshEditSummary();
-                } else {
-                    addChatMessage('❌ Voucher bulunamadı: ' + voucher, 'bot', 'chatMessagesEdit');
-                }
-            } catch (error) {
-                addChatMessage('❌ Bağlantı hatası: ' + error.message, 'bot', 'chatMessagesEdit');
-            }
-        }
+        <!-- Summary column -->
+        <div class="w-80 flex flex-col overflow-y-auto p-4 gap-3">
+          <div id="summaryContainer"></div>
+          <div id="actionButtons" class="hidden flex-col gap-2">
+            <button onclick="confirmReservation()" class="btn-primary w-full">✅ Onayla ve Kaydet</button>
+            <button onclick="downloadVoucherPDF()" id="pdfBtn" class="btn-pdf w-full hidden">⬇ PDF İndir</button>
+            <button onclick="cancelNewReservation()" class="btn-danger w-full">🗑 Sıfırla</button>
+          </div>
+        </div>
 
-        function refreshEditSummary() {
-            const container = document.getElementById('editSummary');
-            const fields = ['yolcu', 'telefon', 'tarih', 'saat', 'job', 'from', 'to', 'hotel', 'ucus', 'yetiskin', 'cocuk', 'bebek', 'fiyat', 'döviz', 'not'];
+      </div>
+    </div>
 
-            container.innerHTML = `
-                <div class="summary-grid mb-4">
-                    ${fields.map(key => `
-                        <div class="card">
-                            <div class="flex justify-between items-center">
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-xs text-gray-500 font-medium">${fieldLabels[key] || key}</p>
-                                    <p class="text-sm font-semibold text-gray-800 truncate">${editReservationData[key] || '-'}</p>
-                                </div>
-                                <span class="edit-icon ml-2" onclick="openEditModal('${key}')">✏️</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-                <button onclick="submitEditChanges()" class="btn-primary">✅ DEĞİŞİKLİKLERİ KAYDET</button>
-            `;
-        }
+    <!-- ═══════════ CHECK TAB ═══════════ -->
+    <div id="panel-check" class="tab-panel w-full">
+      <div class="flex flex-1 overflow-hidden">
+        <div class="flex flex-col flex-1 border-r border-white/10">
+          <div class="p-4 border-b border-white/10">
+            <div class="voucher-input-row">
+              <input id="checkVoucher" type="text" class="voucher-input" placeholder="VOUCHERnu girin (ör. VT-1234-AB)" />
+              <button onclick="checkReservation()" class="btn-primary px-5">Sorgula</button>
+            </div>
+          </div>
+          <div id="chatMessagesCheck" class="chat-area">
+            <div class="bubble-bot">🔍 Sorgulamak istediğiniz voucher numarasını girin.</div>
+          </div>
+        </div>
+        <div class="w-80 overflow-y-auto p-4">
+          <div id="checkSummary"></div>
+        </div>
+      </div>
+    </div>
 
-        async function submitEditChanges() {
-            const voucher = document.getElementById('editVoucher').value.trim().toUpperCase();
-            const d = editReservationData;
-            const payload = {
-                voucher,
-                field_1: d.yolcu || '',
-                field_2: d.telefon || '',
-                field_3: d.tarih || '',
-                field_4: d.saat || '',
-                field_5: d.job || '',
-                field_6: d.hotel || '',
-                field_7: d.from || '',
-                field_8: d.to || '',
-                field_9: d.ucus || '',
-                field_10: d.fiyat || '',
-                field_11: d.not || ''
-            };
+    <!-- ═══════════ EDIT TAB ═══════════ -->
+    <div id="panel-edit" class="tab-panel w-full">
+      <div class="flex flex-1 overflow-hidden">
+        <div class="flex flex-col flex-1 border-r border-white/10">
+          <div class="p-4 border-b border-white/10">
+            <div class="voucher-input-row">
+              <input id="editVoucher" type="text" class="voucher-input" placeholder="Düzenlenecek voucher numarası" />
+              <button onclick="loadForEdit()" class="btn-primary px-5">Yükle</button>
+            </div>
+          </div>
+          <div id="chatMessagesEdit" class="chat-area">
+            <div class="bubble-bot">✏️ Düzenlemek istediğiniz rezervasyonun voucher numarasını girin.</div>
+          </div>
+        </div>
+        <div class="w-80 overflow-y-auto p-4">
+          <div id="editSummary"></div>
+        </div>
+      </div>
+    </div>
 
-            try {
-                const resp = await fetch('/api/edit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (resp.ok) {
-                    addChatMessage('✅ Düzenleme admin\'e gönderildi!', 'bot', 'chatMessagesEdit');
-                    document.getElementById('editVoucher').value = '';
-                    document.getElementById('editSummary').innerHTML = '';
-                    editReservationData = {};
-                } else {
-                    addChatMessage('❌ Hata oluştu.', 'bot', 'chatMessagesEdit');
-                }
-            } catch (error) {
-                addChatMessage('❌ Bağlantı hatası: ' + error.message, 'bot', 'chatMessagesEdit');
-            }
-        }
+    <!-- ═══════════ CANCEL TAB ═══════════ -->
+    <div id="panel-cancel" class="tab-panel w-full">
+      <div class="flex flex-1 overflow-hidden">
+        <div class="flex flex-col flex-1">
+          <div class="p-4 border-b border-white/10">
+            <div class="voucher-input-row">
+              <input id="cancelVoucher" type="text" class="voucher-input" placeholder="İptal edilecek voucher numarası" />
+              <button onclick="submitCancel()" class="btn-danger px-5">İptal Et</button>
+            </div>
+          </div>
+          <div id="chatMessagesCancel" class="chat-area">
+            <div class="bubble-bot">⚠️ İptal etmek istediğiniz rezervasyonun voucher numarasını girin.</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-        async function submitCancel() {
-            const voucher = document.getElementById('cancelVoucher').value.trim().toUpperCase();
-            if (!voucher) return;
+  </div>
+</div>
 
-            if (!confirm('⚠️ ' + voucher + ' numaralı rezervasyonu iptal etmek istiyor musun?')) return;
+<!-- Edit Field Modal -->
+<div id="editModal" class="modal-overlay">
+  <div class="glass-dark rounded-2xl p-6 w-full max-w-sm mx-4">
+    <h3 id="editModalTitle" class="text-white font-semibold mb-4 text-sm"></h3>
+    <input id="editModalValue" type="text" class="chat-input w-full px-4 py-3 mb-4" />
+    <div class="flex gap-2">
+      <button onclick="saveEditField()" class="btn-primary flex-1">Kaydet</button>
+      <button onclick="closeEditModal()" class="btn-ghost flex-1">Vazgeç</button>
+    </div>
+  </div>
+</div>
 
-            try {
-                const resp = await fetch('/api/cancel', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ voucher })
-                });
-                if (resp.ok) {
-                    addChatMessage('✅ ' + voucher + ' başarıyla iptal edildi!', 'bot', 'chatMessagesCancel');
-                    document.getElementById('cancelVoucher').value = '';
-                } else {
-                    addChatMessage('❌ Hata oluştu.', 'bot', 'chatMessagesCancel');
-                }
-            } catch (error) {
-                addChatMessage('❌ Bağlantı hatası: ' + error.message, 'bot', 'chatMessagesCancel');
-            }
-        }
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec';
 
-        document.addEventListener('DOMContentLoaded', updateSummaryCards);
-    </script>
+let conversationHistory = [];
+let reservationData = {};
+let editReservationData = {};
+let currentEditField = '';
+let lastVoucherCode = '';
+
+const fieldLabels = {
+  voucher: 'Voucher',
+  yolcu: 'Yolcu Adı',
+  telefon: 'Telefon',
+  tarih: 'Tarih',
+  saat: 'Saat / Pickup',
+  job: 'Transfer Tipi',
+  from: 'Nereden',
+  to: 'Nereye',
+  hotel: 'Otel',
+  ucus: 'Uçuş No',
+  yetiskin: 'Yetişkin',
+  cocuk: 'Çocuk',
+  bebek: 'Bebek',
+  fiyat: 'Fiyat',
+  'döviz': 'Döviz',
+  not: 'Not',
+  supplier_name: 'Tedarikçi',
+  driver_name: 'Sürücü',
+  driver_phone: 'Sürücü Tel',
+  supplier_price: 'Tedarikçi Fiyatı',
+  status: 'Durum'
+};
+
+// ── Tab switching ──────────────────────────────────
+function switchTab(id) {
+  ['new','check','edit','cancel'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === id);
+    document.getElementById('panel-' + t).classList.toggle('active', t === id);
+  });
+}
+
+// ── Chat helpers ───────────────────────────────────
+function addChatMessage(text, role, containerId) {
+  const el = document.getElementById(containerId);
+  const div = document.createElement('div');
+  div.className = role === 'bot' ? 'bubble-bot' : 'bubble-user';
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── NEW RESERVATION — AI chat ──────────────────────
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  addChatMessage(text, 'user', 'chatMessages');
+  conversationHistory.push({ role: 'user', content: text });
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: conversationHistory })
+    });
+    const data = await resp.json();
+    if (data.reply) {
+      addChatMessage(data.reply, 'bot', 'chatMessages');
+      conversationHistory.push({ role: 'assistant', content: data.reply });
+      extractFields(data.reply);
+      updateSummaryCards();
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessages');
+  }
+}
+
+function extractFields(text) {
+  const patterns = [
+    { keys: ['from'], re: /nereden[:\s]+([^\n,]+)/i },
+    { keys: ['to'],   re: /nereye[:\s]+([^\n,]+)/i },
+    { keys: ['tarih'], re: /(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})/ },
+    { keys: ['ucus'], re: /([A-Z]{2}\d{3,4})/i },
+    { keys: ['saat'], re: /(\d{1,2}:\d{2})/ },
+    { keys: ['yolcu'], re: /(?:yolcu|ad[ıi])[:\s]+([A-ZÇĞİÖŞÜa-zçğışöüı\s]{4,})/i },
+    { keys: ['telefon'], re: /(\+?\d[\d\s\-]{8,})/ },
+    { keys: ['hotel'], re: /otel[:\s]+([^\n,]+)/i },
+    { keys: ['fiyat'], re: /(\d[\d.,]+)\s*(TL|EUR|USD|GBP)?/i },
+    { keys: ['yetiskin'], re: /(\d+)\s*yeti[şs]kin/i },
+    { keys: ['cocuk'],    re: /(\d+)\s*[çc]ocuk/i },
+    { keys: ['bebek'],    re: /(\d+)\s*bebek/i },
+  ];
+  patterns.forEach(p => {
+    const m = text.match(p.re);
+    if (m) p.keys.forEach(k => { if (!reservationData[k]) reservationData[k] = m[1].trim(); });
+  });
+}
+
+function updateSummaryCards() {
+  const container = document.getElementById('summaryContainer');
+  const fields = ['yolcu','telefon','tarih','saat','job','from','to','hotel','ucus','yetiskin','cocuk','bebek','fiyat','döviz','not'];
+  const filled = fields.filter(k => reservationData[k]);
+  if (!filled.length) { container.innerHTML = ''; document.getElementById('actionButtons').classList.add('hidden'); return; }
+
+  container.innerHTML = `
+    <p class="text-xs text-white/40 uppercase tracking-wider font-semibold mb-3">Rezervasyon Özeti</p>
+    <div class="flex flex-col gap-2 mb-3">
+      ${filled.map(k => `
+        <div class="field-card flex justify-between items-center">
+          <div class="min-w-0">
+            <p class="text-xs text-white/40">${fieldLabels[k] || k}</p>
+            <p class="text-sm font-medium text-white truncate">${reservationData[k]}</p>
+          </div>
+          <span class="edit-icon ml-2" onclick="openEditModal('${k}','${(reservationData[k]||'').replace(/'/g,"\\'")}')">✏️</span>
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('actionButtons').classList.remove('hidden');
+  document.getElementById('actionButtons').style.display = 'flex';
+}
+
+// ── Confirm & send ─────────────────────────────────
+async function confirmReservation() {
+  if (!reservationData.yolcu && !reservationData.telefon) {
+    alert('❌ En az yolcu adı veya telefon gerekli!'); return;
+  }
+  const data = {
+    voucher: '', tarih: reservationData.tarih||'', operator: 'BRIX TRAVEL',
+    job: reservationData.job||'ARRIVAL', from: reservationData.from||'', to: reservationData.to||'',
+    hotel: reservationData.hotel||'', ucus: reservationData.ucus||'', saat: reservationData.saat||'',
+    pickup: reservationData.saat||'', yolcu: reservationData.yolcu||'', telefon: reservationData.telefon||'',
+    yetiskin: reservationData.yetiskin||'0', cocuk: reservationData.cocuk||'0', bebek: reservationData.bebek||'0',
+    fiyat: reservationData.fiyat||'', 'döviz': reservationData['döviz']||'EUR', not: reservationData.not||''
+  };
+  try {
+    const resp = await fetch('/api/reserve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (resp.ok) {
+      const voucherCode = 'VT-' + Math.floor(1000 + Math.random()*9000) + '-' + String.fromCharCode(65+Math.floor(Math.random()*26)) + String.fromCharCode(65+Math.floor(Math.random()*26));
+      lastVoucherCode = voucherCode;
+      addChatMessage('✅ Rezervasyon başarıyla kaydedildi! Voucher: ' + voucherCode, 'bot', 'chatMessages');
+      document.getElementById('pdfBtn').classList.remove('hidden');
+    } else {
+      addChatMessage('❌ Hata oluştu. Tekrar deneyin.', 'bot', 'chatMessages');
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessages');
+  }
+}
+
+// ── PDF Download ───────────────────────────────────
+function downloadVoucherPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, margin = 20;
+  const d = reservationData;
+  const voucher = lastVoucherCode || 'VT-XXXX-XX';
+
+  // Background gradient simulation
+  doc.setFillColor(15, 12, 41);
+  doc.rect(0, 0, W, 297, 'F');
+
+  // Header band
+  doc.setFillColor(55, 30, 120);
+  doc.rect(0, 0, W, 38, 'F');
+
+  // Logo area
+  doc.setFontSize(22);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VOITRIP', margin, 18);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(180, 160, 255);
+  doc.text('Akıllı Transfer Asistanı', margin, 25);
+
+  // Voucher code badge
+  doc.setFillColor(139, 92, 246);
+  doc.roundedRect(W - margin - 45, 8, 45, 22, 3, 3, 'F');
+  doc.setFontSize(7);
+  doc.setTextColor(200, 200, 255);
+  doc.text('VOUCHER', W - margin - 22, 16, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text(voucher, W - margin - 22, 24, { align: 'center' });
+
+  // Divider
+  doc.setDrawColor(139, 92, 246, 0.4);
+  doc.setLineWidth(0.3);
+  doc.line(margin, 44, W - margin, 44);
+
+  // Section: Route
+  let y = 54;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(150, 130, 220);
+  doc.text('NEREDEN', margin, y);
+  doc.text('NEREYE', W/2 + 5, y);
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text(d.from || '—', margin, y + 7);
+  doc.text(d.to || '—', W/2 + 5, y + 7);
+
+  // Arrow
+  doc.setDrawColor(139, 92, 246);
+  doc.setLineWidth(0.5);
+  doc.line(W/2 - 10, y + 4, W/2 + 2, y + 4);
+  doc.setFontSize(10);
+  doc.setTextColor(139, 92, 246);
+  doc.text('→', W/2 - 2, y + 5);
+
+  // Dashed separator line
+  y += 18;
+  doc.setLineDashPattern([2, 2], 0);
+  doc.setDrawColor(80, 60, 140);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, W - margin, y);
+  doc.setLineDashPattern([], 0);
+
+  // Detail grid
+  y += 10;
+  const details = [
+    ['Yolcu Adı', d.yolcu || '—'],
+    ['Telefon', d.telefon || '—'],
+    ['Tarih', d.tarih || '—'],
+    ['Saat / Pickup', d.saat || '—'],
+    ['Uçuş No', d.ucus || '—'],
+    ['Transfer Tipi', d.job || 'ARRIVAL'],
+    ['Otel', d.hotel || '—'],
+    ['Yetişkin / Çocuk / Bebek', `${d.yetiskin||'0'} / ${d.cocuk||'0'} / ${d.bebek||'0'}`],
+    ['Fiyat', d.fiyat ? `${d.fiyat} ${d['döviz']||'EUR'}` : '—'],
+    ['Not', d.not || '—'],
+  ];
+
+  const colW = (W - margin * 2 - 8) / 2;
+  let col = 0;
+  let rowStartY = y;
+
+  details.forEach((pair, i) => {
+    const cx = margin + col * (colW + 8);
+    const cy = rowStartY + Math.floor(i/2) * 22;
+
+    doc.setFillColor(30, 20, 70);
+    doc.roundedRect(cx, cy, colW, 18, 2, 2, 'F');
+    doc.setDrawColor(80, 60, 140);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(cx, cy, colW, 18, 2, 2, 'S');
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150, 130, 220);
+    doc.text(pair[0].toUpperCase(), cx + 4, cy + 6);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    const val = doc.splitTextToSize(pair[1], colW - 8)[0];
+    doc.text(val, cx + 4, cy + 13);
+
+    col = col === 0 ? 1 : 0;
+  });
+
+  y = rowStartY + Math.ceil(details.length / 2) * 22 + 10;
+
+  // Footer
+  doc.setFillColor(55, 30, 120);
+  doc.rect(0, 270, W, 27, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(180, 160, 255);
+  doc.text('Bu belge Voitrip Akıllı Transfer Sistemi tarafından oluşturulmuştur.', W/2, 281, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setTextColor(120, 100, 180);
+  doc.text('Oluşturulma: ' + new Date().toLocaleString('tr-TR'), W/2, 288, { align: 'center' });
+
+  doc.save('voitrip-voucher-' + voucher + '.pdf');
+}
+
+// ── Reset ──────────────────────────────────────────
+function resetNewForm() {
+  conversationHistory = []; reservationData = {}; lastVoucherCode = '';
+  document.getElementById('userInput').value = '';
+  document.getElementById('chatMessages').innerHTML = '<div class="bubble-bot">👋 Yeni rezervasyon için nereden nereye gitmek istersin?</div>';
+  document.getElementById('summaryContainer').innerHTML = '';
+  document.getElementById('actionButtons').classList.add('hidden');
+  document.getElementById('pdfBtn').classList.add('hidden');
+}
+
+function cancelNewReservation() { if (confirm('Formu sıfırlamak istediğinden emin misin?')) resetNewForm(); }
+
+// ── CHECK ──────────────────────────────────────────
+async function checkReservation() {
+  const voucher = document.getElementById('checkVoucher').value.trim().toUpperCase();
+  if (!voucher) return;
+  addChatMessage('🔍 ' + voucher + ' kontrol ediliyor...', 'bot', 'chatMessagesCheck');
+  try {
+    const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
+    const data = await resp.json();
+    if (data && data.voucher) {
+      addChatMessage('✅ Rezervasyon bulundu!', 'bot', 'chatMessagesCheck');
+      displayCheckResult(data);
+    } else {
+      addChatMessage('❌ Voucher bulunamadı: ' + voucher, 'bot', 'chatMessagesCheck');
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessagesCheck');
+  }
+}
+
+function displayCheckResult(data) {
+  const fields = ['yolcu','telefon','tarih','saat','job','from','to','hotel','ucus','yetiskin','cocuk','bebek','fiyat','döviz','not','supplier_name','driver_name','driver_phone','supplier_price','status'];
+  document.getElementById('checkSummary').innerHTML = `
+    <div class="voucher-card p-4 mb-3">
+      <p class="text-xs text-white/40 uppercase tracking-wider mb-1">Voucher</p>
+      <p class="text-lg font-bold text-violet-300">${data.voucher}</p>
+    </div>
+    <div class="flex flex-col gap-2">
+      ${fields.filter(k => data[k]).map(k => `
+        <div class="field-card">
+          <p class="text-xs text-white/40">${fieldLabels[k]||k}</p>
+          <p class="text-sm font-semibold text-white">${data[k]||'—'}</p>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── EDIT ───────────────────────────────────────────
+async function loadForEdit() {
+  const voucher = document.getElementById('editVoucher').value.trim().toUpperCase();
+  if (!voucher) return;
+  addChatMessage('⏳ ' + voucher + ' yükleniyor...', 'bot', 'chatMessagesEdit');
+  try {
+    const resp = await fetch('/api/check?voucher=' + encodeURIComponent(voucher));
+    const data = await resp.json();
+    if (data && data.voucher) {
+      editReservationData = { ...data };
+      addChatMessage('✅ Yüklendi! Sağdaki alanları düzenleyebilirsin.', 'bot', 'chatMessagesEdit');
+      refreshEditSummary();
+    } else {
+      addChatMessage('❌ Voucher bulunamadı: ' + voucher, 'bot', 'chatMessagesEdit');
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessagesEdit');
+  }
+}
+
+function refreshEditSummary() {
+  const fields = ['yolcu','telefon','tarih','saat','job','from','to','hotel','ucus','yetiskin','cocuk','bebek','fiyat','döviz','not'];
+  document.getElementById('editSummary').innerHTML = `
+    <div class="flex flex-col gap-2 mb-3">
+      ${fields.map(k => `
+        <div class="field-card flex justify-between items-center">
+          <div class="min-w-0">
+            <p class="text-xs text-white/40">${fieldLabels[k]||k}</p>
+            <p class="text-sm font-medium text-white truncate">${editReservationData[k]||'—'}</p>
+          </div>
+          <span class="edit-icon ml-2" onclick="openEditModal('${k}','${(editReservationData[k]||'').replace(/'/g,"\\'")}')">✏️</span>
+        </div>`).join('')}
+    </div>
+    <button onclick="submitEditChanges()" class="btn-primary w-full">✅ DEĞİŞİKLİKLERİ KAYDET</button>`;
+}
+
+async function submitEditChanges() {
+  const voucher = document.getElementById('editVoucher').value.trim().toUpperCase();
+  const d = editReservationData;
+  const payload = { voucher, field_1:d.yolcu||'', field_2:d.telefon||'', field_3:d.tarih||'', field_4:d.saat||'', field_5:d.job||'', field_6:d.hotel||'', field_7:d.from||'', field_8:d.to||'', field_9:d.ucus||'', field_10:d.fiyat||'', field_11:d.not||'' };
+  try {
+    const resp = await fetch('/api/edit', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (resp.ok) {
+      addChatMessage('✅ Düzenleme admin\'e gönderildi!', 'bot', 'chatMessagesEdit');
+      document.getElementById('editVoucher').value = '';
+      document.getElementById('editSummary').innerHTML = '';
+      editReservationData = {};
+    } else {
+      addChatMessage('❌ Hata oluştu.', 'bot', 'chatMessagesEdit');
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessagesEdit');
+  }
+}
+
+// ── CANCEL ─────────────────────────────────────────
+async function submitCancel() {
+  const voucher = document.getElementById('cancelVoucher').value.trim().toUpperCase();
+  if (!voucher) return;
+  if (!confirm('⚠️ ' + voucher + ' numaralı rezervasyonu iptal etmek istiyor musun?')) return;
+  try {
+    const resp = await fetch('/api/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ voucher }) });
+    if (resp.ok) {
+      addChatMessage('✅ ' + voucher + ' başarıyla iptal edildi!', 'bot', 'chatMessagesCancel');
+      document.getElementById('cancelVoucher').value = '';
+    } else {
+      addChatMessage('❌ Hata oluştu.', 'bot', 'chatMessagesCancel');
+    }
+  } catch (e) {
+    addChatMessage('❌ Bağlantı hatası: ' + e.message, 'bot', 'chatMessagesCancel');
+  }
+}
+
+// ── Edit Modal ─────────────────────────────────────
+function openEditModal(field, currentVal) {
+  currentEditField = field;
+  document.getElementById('editModalTitle').textContent = (fieldLabels[field]||field) + ' düzenle';
+  document.getElementById('editModalValue').value = currentVal || '';
+  document.getElementById('editModal').classList.add('active');
+  setTimeout(() => document.getElementById('editModalValue').focus(), 50);
+}
+
+function saveEditField() {
+  const newValue = document.getElementById('editModalValue').value.trim();
+  if (!newValue) return;
+  reservationData[currentEditField] = newValue;
+  editReservationData[currentEditField] = newValue;
+  updateSummaryCards();
+  closeEditModal();
+  if (document.getElementById('editSummary').innerHTML) refreshEditSummary();
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.remove('active'); }
+
+document.getElementById('editModal').addEventListener('click', e => { if (e.target === document.getElementById('editModal')) closeEditModal(); });
+document.getElementById('editModalValue').addEventListener('keydown', e => { if (e.key === 'Enter') saveEditField(); });
+</script>
+
+<!-- Copy logo to accessible path -->
+<script>
+(function() {
+  const img = new Image();
+  img.src = '/logo.png';
+  img.onerror = function() {
+    document.getElementById('fallback-logo').style.display = 'flex';
+  };
+})();
+</script>
 </body>
 </html>

@@ -47,6 +47,10 @@ def proxy_mockup(path):
 def index():
     return send_from_directory('.', 'index.html')
 
+@app.route('/logo.png')
+def logo():
+    return send_from_directory('.', 'logo.png')
+
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
