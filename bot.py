@@ -9,7 +9,7 @@ from openai import OpenAI
 app = Flask(__name__)
 CORS(app)
 
-SCRIPT_URL    = 'https://script.google.com/macros/s/AKfycbxvqcAXLNyIU0DPrNQQDB3ZcfIsy9pT5STCkZTe-9yQIkED_au6B_ciF_aop_jyTP7ulQ/exec'
+SCRIPT_URL    = 'https://script.google.com/macros/s/AKfycbzK8JePbJKk87aryoAvuOWvH7nrrA_6HMnvrZpzaE8zCNexE9ndrCyO2V_gKILAbl2iaA/exec'
 TELEGRAM_TOKEN= '8654282740:AAGSXtoXAMtbTmfJiWJI1C_VpM1Oq-4XvGI'
 ADMIN_CHAT_ID = '5833736265'
 TG            = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}'
