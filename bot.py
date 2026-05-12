@@ -244,13 +244,42 @@ def notify_driver(drv_tgid, drv_name, voucher, res_data):
 
 # ── AI chat fields extractor ──────────────────────────────────────────
 def extract_fields_from_history(messages):
+    """
+    Sadece KULLANICI mesajlarından veri çıkar.
+    AI'nın soru metinlerini değer olarak kaydetmez.
+    """
+    # Sadece user mesajlarını al
+    user_lines = []
+    for m in messages:
+        if m.get('role') == 'user':
+            user_lines.append(m['content'])
+
+    if not user_lines:
+        return {}
+
+    user_text = '\n'.join(f'- {line}' for line in user_lines)
+
+    extraction_messages = [
+        {
+            'role': 'system',
+            'content': (
+                'Sen bir transfer rezervasyon veri çıkarma asistanısın. '
+                'Kullanıcının yazdığı mesajlardan rezervasyon bilgilerini çıkar. '
+                'KURAL: Sadece kullanıcının açıkça yazdığı gerçek değerleri kaydet. '
+                'Soru cümlesi, açıklama veya AI metni asla değer olarak kaydetme. '
+                'Kullanıcı bir bilgiyi vermemişse o alanı boş bırak.'
+            )
+        },
+        {
+            'role': 'user',
+            'content': f'Aşağıdaki kullanıcı mesajlarından rezervasyon bilgilerini çıkar:\n\n{user_text}'
+        }
+    ]
+
     try:
         resp = client.chat.completions.create(
             model='gpt-4o-mini',
-            messages=messages + [{
-                'role': 'user',
-                'content': 'Şimdiye kadar kullanıcının kesin olarak belirttiği rezervasyon bilgilerini update_fields fonksiyonuyla kaydet. Sadece kullanıcının söylediği gerçek değerleri yaz.'
-            }],
+            messages=extraction_messages,
             tools=EXTRACT_TOOL,
             tool_choice={'type': 'function', 'function': {'name': 'update_fields'}},
             max_tokens=300
