@@ -265,40 +265,13 @@ function hideThinking() {
   if (t) t.remove();
 }
 
-// ─── Extract fields from AI reply ─────────────────────────────────
-function extract(text) {
-  if (!res.job) {
-    if (/\bARRIVAL\b/i.test(text)) res.job = 'ARRIVAL';
-    else if (/\bDEPARTURE\b/i.test(text)) res.job = 'DEPARTURE';
-  }
-  const fm = text.match(/Nereden[:\s]+([^\n→\r]+)/i);
-  if (fm && !res.from) res.from = fm[1].trim().replace(/\s*[→|].*$/,'');
-  const tm = text.match(/Nereye[:\s]+([^\n\r]+)/i);
-  if (tm && !res.to) res.to = tm[1].trim();
-  const dm = text.match(/(\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{2,4})/);
-  if (dm && !res.tarih) res.tarih = dm[1];
-  const um = text.match(/\b([A-Z]{2}\d{3,4})\b/);
-  if (um && !res.ucus) res.ucus = um[1];
-  const sm = text.match(/Uçuş[:\s]+[A-Z0-9]+\s+saat\s+(\d{1,2}:\d{2})/i) || text.match(/✈️[^✈]*?(\d{1,2}:\d{2})/);
-  if (sm && !res.saat) res.saat = sm[1];
-  const pm = text.match(/Pickup[:\s]+(\d{1,2}:\d{2})/i) || text.match(/🕐[^\d]*(\d{1,2}:\d{2})/);
-  if (pm && !res.pickup) res.pickup = pm[1];
-  const ym = text.match(/Yolcu[:\s]+([^\n\r|–-]+?)(?:\s*[\|–-]|\s*\n|$)/i);
-  if (ym && !res.yolcu) res.yolcu = ym[1].trim();
-  const telm = text.match(/Telefon[:\s]+([\+\d][\d\s\-]{8,})/i);
-  if (telm && !res.telefon) res.telefon = telm[1].trim();
-  const hm = text.match(/Otel[:\s]+([^\n\r]+)/i);
-  if (hm && !res.hotel) res.hotel = hm[1].trim();
-  const yem = text.match(/Yetişkin[:\s]+(\d+)/i);
-  if (yem && !res.yetiskin) res.yetiskin = yem[1];
-  const cm = text.match(/Çocuk[:\s]+(\d+)/i);
-  if (cm && !res.cocuk) res.cocuk = cm[1];
-  const bm = text.match(/Bebek[:\s]+(\d+)/i);
-  if (bm && !res.bebek) res.bebek = bm[1];
-  const fim = text.match(/Fiyat[:\s]+([\d.,]+)/i);
-  if (fim && !res.fiyat) res.fiyat = fim[1];
-  const dovm = text.match(/\b(EUR|USD|TRY|GBP)\b/i);
-  if (dovm && !res.doviz) res.doviz = dovm[1].toUpperCase();
+// ─── Merge fields from API structured response ─────────────────────
+// API now uses OpenAI tool-calling to extract only real user-confirmed values
+function mergeFields(fields) {
+  if (!fields || typeof fields !== 'object') return;
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v && String(v).trim()) res[k] = String(v).trim();
+  });
 }
 
 // ─── Summary panel ────────────────────────────────────────────────
@@ -371,7 +344,7 @@ async function sendMessage() {
     } else {
       addMsg(data.reply, 'bot', 'chatMessages');
       history.push({role:'assistant', content: data.reply});
-      extract(data.reply);
+      mergeFields(data.fields);
       renderSummary();
     }
   } catch(e) {
